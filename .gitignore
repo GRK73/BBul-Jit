@@ -1,0 +1,5 @@
+# Don't upload the API key!
+GEMINI_API_KEY.txt
+.env
+node_modules/
+.gemini/
