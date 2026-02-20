@@ -3,7 +3,11 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches:
-      - main  # main 브랜치에 푸시될 때마다 배포
+      - main
+
+# 추가된 부분: 워크플로우에 쓰기 권한 부여
+permissions:
+  contents: write
 
 jobs:
   build-and-deploy:
@@ -26,5 +30,5 @@ jobs:
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: dist  # 빌드된 결과물이 있는 폴더
-          branch: gh-pages # 배포용 브랜치
+          folder: dist
+          branch: gh-pages
