@@ -10,7 +10,7 @@ const StarBorder = ({
 }) => {
   return (
     <Component
-      className={`relative inline-block overflow-hidden rounded-[2rem] p-[1px] ${className}`}
+      className={`relative block overflow-hidden rounded-[2rem] p-[2px] ${className}`}
       {...rest}
     >
       {/* 기본 회색 테두리 레이어 */}
@@ -18,7 +18,7 @@ const StarBorder = ({
       
       {/* 회전하는 빛 레이어 */}
       <div
-        className="absolute inset-[-1000%] animate-[spin_linear_infinite] z-10"
+        className="absolute inset-[-50%] animate-[spin_linear_infinite] z-10"
         style={{
           animationDuration: speed,
           background: `conic-gradient(from 0deg, transparent 0%, transparent 40%, ${color} 50%, transparent 60%, transparent 100%)`,
@@ -26,7 +26,7 @@ const StarBorder = ({
       />
       
       {/* 내부 콘텐츠 레이어 */}
-      <div className="relative z-20 h-full w-full rounded-[1.95rem] bg-black text-white overflow-hidden">
+      <div className="relative z-20 h-full w-full rounded-[1.85rem] bg-black text-white overflow-hidden">
         {children}
       </div>
     </Component>
