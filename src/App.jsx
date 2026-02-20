@@ -33,20 +33,8 @@ const App = () => {
 
   const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-  // [핵심] 어떤 응답이 와도 JSON으로 파싱하는 함수
-  const smartParse = (data) => {
-    if (!data) return null;
-    if (typeof data === 'object') return data;
-    try {
-      // AllOrigins의 wrapper 제거 시도
-      const parsed = JSON.parse(data);
-      return parsed.contents ? JSON.parse(parsed.contents) : parsed;
-    } catch (e) {
-      try { return JSON.parse(data); } catch (e2) { return null; }
-    }
-  };
-
   const fetchWithSmartProxy = async (bjid) => {
+    // 모바일 API 경로가 보안이 더 느슨함
     const liveUrl = `https://live.sooplive.co.kr/afreeca/player_live_api.php?bjid=${bjid}&bid=${bjid}&type=live&player_type=html5`;
     
     if (isLocal) {
@@ -62,19 +50,17 @@ const App = () => {
       } catch (e) { return null; }
     }
 
-    // [배포 환경] 가장 성공률 높은 순서대로 시도
-    const proxyUrls = [
-      `https://api.allorigins.win/get?url=${encodeURIComponent(liveUrl)}`,
-      `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(liveUrl)}`,
-      `https://corsproxy.io/?${encodeURIComponent(liveUrl)}`
+    // [배포 환경 전용] 검증된 RAW 프록시 사용
+    const proxies = [
+      (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+      (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
     ];
 
-    for (const pUrl of proxyUrls) {
+    for (const getProxyUrl of proxies) {
       try {
-        const res = await fetch(pUrl, { cache: 'no-store' });
+        const res = await fetch(getProxyUrl(liveUrl));
         if (!res.ok) continue;
-        const rawData = await res.json();
-        const data = smartParse(rawData);
+        const data = await res.json();
         
         if (data?.CHANNEL?.RESULT === 1) {
           const channel = data.CHANNEL;
@@ -82,11 +68,11 @@ const App = () => {
             id: bjid,
             nick: channel.BJNICK,
             title: channel.TITLE,
-            viewer: "LIVE", // 상세 정보까지 가져오면 프록시 한계에 걸리므로 LIVE로 고정
+            viewer: "LIVE",
             thumb: `https://liveimg.sooplive.co.kr/m/${channel.BNO}?v=${Date.now()}`
           };
         }
-        if (data) break; // 응답은 왔는데 방송이 꺼진 경우라면 다음 프록시 시도 안 함
+        if (data) break;
       } catch (e) { continue; }
     }
     return null;
@@ -96,14 +82,14 @@ const App = () => {
     const allIds = Object.values(streamers).flat();
     const results = [];
     
-    // 배포 환경에서는 프록시 차단을 피하기 위해 5명씩 묶어서 처리
-    const chunkSize = isLocal ? allIds.length : 5;
+    // 배포 환경은 3명씩 천천히 (차단 방지)
+    const chunkSize = isLocal ? allIds.length : 3;
     for (let i = 0; i < allIds.length; i += chunkSize) {
       const chunk = allIds.slice(i, i + chunkSize);
       const promises = chunk.map(id => fetchWithSmartProxy(id));
       const chunkResults = await Promise.all(promises);
       results.push(...chunkResults.filter(r => r !== null));
-      if (!isLocal) await new Promise(r => setTimeout(r, 500));
+      if (!isLocal) await new Promise(r => setTimeout(r, 1000));
     }
 
     setLiveStreamers(results);
@@ -113,7 +99,8 @@ const App = () => {
 
   useEffect(() => {
     checkAllStatus();
-    const timer = setInterval(checkAllStatus, isLocal ? 30000 : 180000); // 배포는 3분마다
+    const interval = isLocal ? 30000 : 180000;
+    const timer = setInterval(checkAllStatus, interval);
     return () => clearInterval(timer);
   }, []);
 
@@ -121,7 +108,7 @@ const App = () => {
     <div className="min-h-screen bg-black flex items-center justify-center text-white font-planb">
       <div className="text-center">
         <div className="text-4xl animate-pulse mb-4 tracking-widest text-white">PLAN.B</div>
-        <div className="text-[10px] font-sans opacity-40 tracking-[0.5em] uppercase">Connecting to Satellite...</div>
+        <div className="text-[10px] font-sans opacity-40 tracking-[0.5em] uppercase">Checking Live Streamers...</div>
       </div>
     </div>
   );
@@ -137,7 +124,7 @@ const App = () => {
               Currently Offline
             </p>
             <div className="h-[1px] w-24 bg-white/20"></div>
-            <p className="text-[10px] text-gray-600 mt-4 tracking-widest uppercase">Last Sync: {updateTime}</p>
+            <p className="text-[10px] text-gray-600 mt-4 tracking-widest uppercase italic">Checked at {updateTime}</p>
           </div>
         </div>
       ) : (
