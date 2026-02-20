@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import streamers from '../streamers.json';
 import StarBorder from './components/StarBorder';
+import TargetCursor from './components/TargetCursor';
 
 // [데코레이션 SVG]
 const DecoIcon = () => (
@@ -81,11 +82,12 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-black text-white font-sans overflow-x-hidden selection:bg-white selection:text-black">
+      {/* 커스텀 타겟 커서 적용 */}
+      <TargetCursor spinDuration={2.5} hideDefaultCursor={true} />
+
       {liveStreamers.length === 0 ? (
-        // [OFFLINE MODE]
         <div className="h-screen flex flex-col items-center justify-center scale-75 md:scale-100">
           <GlitteringLogo />
-          
           <div className="mt-32 flex flex-col items-center gap-6">
             <div className="h-[1px] w-24 bg-white/20"></div>
             <p className="text-white tracking-[1.5em] text-xl md:text-2xl font-black animate-pulse uppercase translate-x-[0.7em]">
@@ -95,7 +97,6 @@ const App = () => {
           </div>
         </div>
       ) : (
-        // [LIVE MODE]
         <div className="max-w-7xl mx-auto p-8 md:p-16">
           <div className="flex flex-col md:flex-row justify-between items-center mb-24 gap-12 pb-16 border-b border-white/5">
             <div className="scale-50 md:scale-75 -ml-10">
@@ -114,7 +115,7 @@ const App = () => {
                 key={streamer.id} 
                 color="white" 
                 speed="10s" 
-                className="group w-full shadow-[0_20px_60px_rgba(0,0,0,1)]"
+                className="group w-full shadow-[0_20px_60px_rgba(0,0,0,1)] cursor-target"
               >
                 <div className="bg-[#030303]">
                   {/* 썸네일 영역 */}
@@ -129,7 +130,6 @@ const App = () => {
                     </div>
                     <div className="h-[1px] w-12 bg-white/30 mb-8 group-hover:w-full transition-all duration-1000 ease-in-out"></div>
                     
-                    {/* 방송 제목: 상시 한 줄 표시 + 페이드 */}
                     <div className="title-container mb-12 h-8 flex items-center">
                       <p className="title-text text-gray-400 text-sm font-medium italic opacity-80 transition-opacity">
                         "{streamer.title}"
@@ -139,7 +139,7 @@ const App = () => {
                     <a 
                       href={`https://play.sooplive.co.kr/${streamer.id}`} 
                       target="_blank" rel="noreferrer"
-                      className="flex items-center justify-center w-full py-5 border border-white/10 bg-white/5 text-white/80 hover:bg-white hover:text-black hover:border-white font-black tracking-[0.2em] transition-all duration-500 rounded-2xl text-[10px] uppercase font-planb"
+                      className="cursor-target flex items-center justify-center w-full py-5 border border-white/10 bg-white/5 text-white/80 hover:bg-white hover:text-black hover:border-white font-black tracking-[0.2em] transition-all duration-500 rounded-2xl text-[10px] uppercase font-planb"
                     >
                       Connect Stream
                     </a>
