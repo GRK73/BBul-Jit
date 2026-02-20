@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@100;400;700;900&display=swap');
+      
+      @font-face {
+        font-family: 'planb';
+        src: url('planb.otf') format('opentype');
+      }
+      
+      body {
+        margin: 0;
+        background-color: black;
+        font-family: 'Pretendard', sans-serif;
+      }
+      
+      .font-planb {
+        font-family: 'planb', sans-serif !important;
+      }
+      
+      /* --- GLITCH (Glittering) Effect --- */
+      
+      .stack {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+      
+      .stack span {
+        font-family: 'planb', sans-serif;
+        grid-row-start: 1;
+        grid-column-start: 1;
+        --stack-height: calc(100% / var(--stacks) - 1px);
+        --inverse-index: calc(calc(var(--stacks) - 1) - var(--index));
+        --clip-top: calc(var(--stack-height) * var(--index));
+        --clip-bottom: calc(var(--stack-height) * var(--inverse-index));
+        clip-path: inset(var(--clip-top) 0 var(--clip-bottom) 0);
+        animation: stack 340ms cubic-bezier(.46,.29,0,1.24) 1 backwards calc(var(--index) * 120ms), glitch 2s ease infinite 2s alternate-reverse;
+      }
+      
+      .stack span:nth-child(odd) { --glitch-translate: 8px; }
+      
+      .stack span:nth-child(even) { --glitch-translate: -8px; }
+      
+      @keyframes stack {
+        0% { opacity: 0; transform: translateX(-50%); text-shadow: -2px 3px 0 red, 2px -3px 0 blue; }
+        60% { opacity: 0.5; transform: translateX(50%); }
+        80% { transform: none; opacity: 1; text-shadow: 2px -3px 0 red, -2px 3px 0 blue; }
+        100% { text-shadow: none; }
+      }
+      
+      @keyframes glitch {
+        0% { text-shadow: -2px 3px 0 red, 2px -3px 0 blue; transform: translate(var(--glitch-translate)); }
+        2% { text-shadow: 2px -3px 0 red, -2px 3px 0 blue; }
+        4%, 100% { text-shadow: none; transform: none; }
+      }
+      
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      
+      .animate-spin-slow {
+        animation: spin 10s linear infinite;
+      }
+      
+      /* 제목 페이드 효과 */
+      
+      .title-container {
+        position: relative;
+        overflow: hidden;
+        white-space: nowrap;
+        mask-image: linear-gradient(to right, black 85%, transparent 100%);
+        -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+      }
+      
+      .title-text {
+        display: inline-block;
+      }
+    </style>
+    <title>PLAN.B - LIVE STATUS</title>
+    <script type="module" crossorigin src="./assets/index-CPwCaW6W.js"></script>
+  </head>
+  <body class="bg-black text-white overflow-x-hidden">
+    <div id="root"></div>
+  </body>
+</html>
