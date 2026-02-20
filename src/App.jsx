@@ -32,18 +32,30 @@ const App = () => {
   const [liveStreamers, setLiveStreamers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 공개 CORS 프록시 (allorigins) 사용
+  // 더 안전한 CORS 데이터 요청 함수
   const getCORSData = async (url) => {
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-    const response = await axios.get(proxyUrl);
-    return JSON.parse(response.data.contents);
+    try {
+      // 캐시 방지를 위해 랜덤 쿼리 추가
+      const finalUrl = `${url}${url.includes('?') ? '&' : '?'}_cache=${Date.now()}`;
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(finalUrl)}`;
+      const response = await axios.get(proxyUrl);
+      
+      const contents = response.data.contents;
+      // 데이터가 문자열이면 파싱, 이미 객체면 그대로 반환
+      return typeof contents === 'string' ? JSON.parse(contents) : contents;
+    } catch (e) {
+      console.error(`Proxy request failed for ${url}`, e);
+      return null;
+    }
   };
 
   const checkAllStatus = async () => {
     const allIds = Object.values(streamers).flat();
-    const checkPromises = allIds.map(async (bjid) => {
+    const results = [];
+    
+    // [중요] 한꺼번에 요청하지 않고 순차적으로 요청하여 안정성 확보
+    for (const bjid of allIds) {
       try {
-        // 1. 방송 여부 체크 (GET 방식으로 변경하여 프록시 최적화)
         const liveUrl = `https://live.sooplive.co.kr/afreeca/player_live_api.php?bjid=${bjid}&bid=${bjid}&type=live&player_type=html5`;
         const data = await getCORSData(liveUrl);
 
@@ -51,41 +63,36 @@ const App = () => {
           const channel = data.CHANNEL;
           const broadNo = channel.BNO;
           
-          try {
-            // 2. 상세 정보 가져오기
-            const stationUrl = `https://chapi.sooplive.co.kr/api/${bjid}/station`;
-            const stationData = await getCORSData(stationUrl);
-            const broadData = stationData?.broad;
-
-            return {
-              id: bjid,
-              nick: channel.BJNICK,
-              title: channel.TITLE,
-              viewer: broadData?.visitor_cnt || "LIVE",
-              thumb: `https://liveimg.sooplive.co.kr/m/${broadNo}?${Date.now()}`
-            };
-          } catch (e) {
-            return { id: bjid, nick: channel.BJNICK, title: channel.TITLE, viewer: "LIVE", thumb: `https://liveimg.sooplive.co.kr/m/${broadNo}?${Date.now()}` };
-          }
+          // 채널 정보도 가져오기 (시청자 수용)
+          const stationUrl = `https://chapi.sooplive.co.kr/api/${bjid}/station`;
+          const stationData = await getCORSData(stationUrl);
+          
+          results.push({
+            id: bjid,
+            nick: channel.BJNICK,
+            title: channel.TITLE,
+            viewer: stationData?.broad?.visitor_cnt || "LIVE",
+            thumb: `https://liveimg.sooplive.co.kr/m/${broadNo}?v=${Date.now()}`
+          });
         }
-      } catch (e) { console.error(e); }
-      return null;
-    });
-
-    const settledResults = await Promise.all(checkPromises);
-    setLiveStreamers(settledResults.filter(r => r !== null));
+      } catch (e) {
+        console.warn(`Failed to check ${bjid}`, e);
+      }
+    }
+    
+    setLiveStreamers(results);
     setLoading(false);
   };
 
   useEffect(() => {
     checkAllStatus();
-    const timer = setInterval(checkAllStatus, 30000);
+    const timer = setInterval(checkAllStatus, 60000); // 1분마다 갱신 (프록시 부하 방지)
     return () => clearInterval(timer);
   }, []);
 
   if (loading) return (
     <div className="min-h-screen bg-black flex items-center justify-center text-white">
-      <div className="animate-pulse text-2xl font-black tracking-[0.5em] font-planb">PLAN.B</div>
+      <div className="animate-pulse text-2xl font-black tracking-[0.3em] font-planb">PLAN.B</div>
     </div>
   );
 
