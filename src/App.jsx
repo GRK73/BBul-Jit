@@ -29,60 +29,64 @@ const GlitteringLogo = ({ sizeClass = "text-[6rem] md:text-[10rem]" }) => (
 const App = () => {
   const [liveStreamers, setLiveStreamers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [updateTime, setUpdateTime] = useState("");
 
   const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
+  // [핵심] 어떤 응답이 와도 JSON으로 파싱하는 함수
+  const smartParse = (data) => {
+    if (!data) return null;
+    if (typeof data === 'object') return data;
+    try {
+      // AllOrigins의 wrapper 제거 시도
+      const parsed = JSON.parse(data);
+      return parsed.contents ? JSON.parse(parsed.contents) : parsed;
+    } catch (e) {
+      try { return JSON.parse(data); } catch (e2) { return null; }
+    }
+  };
+
   const fetchWithSmartProxy = async (bjid) => {
+    const liveUrl = `https://live.sooplive.co.kr/afreeca/player_live_api.php?bjid=${bjid}&bid=${bjid}&type=live&player_type=html5`;
+    
     if (isLocal) {
-      // 로컬: Vite Proxy + POST (가장 확실함)
       try {
-        const liveRes = await axios.post(`/api-soop/afreeca/player_live_api.php?bjid=${bjid}`, 
+        const res = await axios.post(`/api-soop/afreeca/player_live_api.php?bjid=${bjid}`, 
           new URLSearchParams({ bid: bjid, type: 'live', player_type: 'html5' }), 
           { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
         );
-        
-        if (liveRes.data?.CHANNEL?.RESULT === 1) {
-          const stationRes = await axios.get(`/api-ch/api/${bjid}/station`);
-          return {
-            id: bjid,
-            nick: liveRes.data.CHANNEL.BJNICK,
-            title: liveRes.data.CHANNEL.TITLE,
-            viewer: stationRes.data?.broad?.visitor_cnt || "LIVE",
-            thumb: `https://liveimg.sooplive.co.kr/m/${liveRes.data.CHANNEL.BNO}?v=${Date.now()}`
-          };
+        if (res.data?.CHANNEL?.RESULT === 1) {
+          const sRes = await axios.get(`/api-ch/api/${bjid}/station`);
+          return { id: bjid, nick: res.data.CHANNEL.BJNICK, title: res.data.CHANNEL.TITLE, viewer: sRes.data?.broad?.visitor_cnt || "LIVE", thumb: `https://liveimg.sooplive.co.kr/m/${res.data.CHANNEL.BNO}?v=${Date.now()}` };
         }
-      } catch (e) { console.error(`Local error for ${bjid}:`, e); }
-      return null;
+      } catch (e) { return null; }
     }
 
-    // [배포] 다중 프록시 전략
-    const liveUrl = `https://live.sooplive.co.kr/afreeca/player_live_api.php?bjid=${bjid}&bid=${bjid}&type=live&player_type=html5`;
-    const proxies = [
-      (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-      (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-      (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
+    // [배포 환경] 가장 성공률 높은 순서대로 시도
+    const proxyUrls = [
+      `https://api.allorigins.win/get?url=${encodeURIComponent(liveUrl)}`,
+      `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(liveUrl)}`,
+      `https://corsproxy.io/?${encodeURIComponent(liveUrl)}`
     ];
 
-    for (const getProxyUrl of proxies) {
+    for (const pUrl of proxyUrls) {
       try {
-        const res = await fetch(getProxyUrl(liveUrl));
+        const res = await fetch(pUrl, { cache: 'no-store' });
         if (!res.ok) continue;
-        const liveData = await res.json();
+        const rawData = await res.json();
+        const data = smartParse(rawData);
         
-        if (liveData?.CHANNEL?.RESULT === 1) {
-          const stationUrl = `https://chapi.sooplive.co.kr/api/${bjid}/station`;
-          const sRes = await fetch(getProxyUrl(stationUrl));
-          const sData = sRes.ok ? await sRes.json() : null;
-
+        if (data?.CHANNEL?.RESULT === 1) {
+          const channel = data.CHANNEL;
           return {
             id: bjid,
-            nick: liveData.CHANNEL.BJNICK,
-            title: liveData.CHANNEL.TITLE,
-            viewer: sData?.broad?.visitor_cnt || "LIVE",
-            thumb: `https://liveimg.sooplive.co.kr/m/${liveData.CHANNEL.BNO}?v=${Date.now()}`
+            nick: channel.BJNICK,
+            title: channel.TITLE,
+            viewer: "LIVE", // 상세 정보까지 가져오면 프록시 한계에 걸리므로 LIVE로 고정
+            thumb: `https://liveimg.sooplive.co.kr/m/${channel.BNO}?v=${Date.now()}`
           };
         }
-        break; // 결과가 1이 아니면 방송 안 켜진 것으로 판단
+        if (data) break; // 응답은 왔는데 방송이 꺼진 경우라면 다음 프록시 시도 안 함
       } catch (e) { continue; }
     }
     return null;
@@ -92,38 +96,32 @@ const App = () => {
     const allIds = Object.values(streamers).flat();
     const results = [];
     
-    // 로컬은 병렬, 배포는 순차 청크
-    if (isLocal) {
-      const promises = allIds.map(id => fetchWithSmartProxy(id));
+    // 배포 환경에서는 프록시 차단을 피하기 위해 5명씩 묶어서 처리
+    const chunkSize = isLocal ? allIds.length : 5;
+    for (let i = 0; i < allIds.length; i += chunkSize) {
+      const chunk = allIds.slice(i, i + chunkSize);
+      const promises = chunk.map(id => fetchWithSmartProxy(id));
       const chunkResults = await Promise.all(promises);
       results.push(...chunkResults.filter(r => r !== null));
-    } else {
-      const chunkSize = 3;
-      for (let i = 0; i < allIds.length; i += chunkSize) {
-        const chunk = allIds.slice(i, i + chunkSize);
-        const chunkPromises = chunk.map(id => fetchWithSmartProxy(id));
-        const chunkResults = await Promise.all(chunkPromises);
-        results.push(...chunkResults.filter(r => r !== null));
-        if (i + chunkSize < allIds.length) await new Promise(r => setTimeout(r, 300));
-      }
+      if (!isLocal) await new Promise(r => setTimeout(r, 500));
     }
 
     setLiveStreamers(results);
     setLoading(false);
+    setUpdateTime(new Date().toLocaleTimeString());
   };
 
   useEffect(() => {
     checkAllStatus();
-    const interval = isLocal ? 30000 : 120000;
-    const timer = setInterval(checkAllStatus, interval);
+    const timer = setInterval(checkAllStatus, isLocal ? 30000 : 180000); // 배포는 3분마다
     return () => clearInterval(timer);
   }, []);
 
   if (loading) return (
     <div className="min-h-screen bg-black flex items-center justify-center text-white font-planb">
       <div className="text-center">
-        <div className="text-4xl animate-pulse mb-4 tracking-widest">PLAN.B</div>
-        <div className="text-[10px] font-sans opacity-40 tracking-[0.5em] uppercase">Synchronizing...</div>
+        <div className="text-4xl animate-pulse mb-4 tracking-widest text-white">PLAN.B</div>
+        <div className="text-[10px] font-sans opacity-40 tracking-[0.5em] uppercase">Connecting to Satellite...</div>
       </div>
     </div>
   );
@@ -139,6 +137,7 @@ const App = () => {
               Currently Offline
             </p>
             <div className="h-[1px] w-24 bg-white/20"></div>
+            <p className="text-[10px] text-gray-600 mt-4 tracking-widest uppercase">Last Sync: {updateTime}</p>
           </div>
         </div>
       ) : (
@@ -176,6 +175,7 @@ const App = () => {
               </StarBorder>
             ))}
           </div>
+          <p className="text-center text-[10px] text-gray-600 mt-20 tracking-widest uppercase">System Operational // Last Sync: {updateTime}</p>
         </div>
       )}
     </div>
