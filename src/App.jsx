@@ -32,21 +32,31 @@ const App = () => {
   const [liveStreamers, setLiveStreamers] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // 공개 CORS 프록시 (allorigins) 사용
+  const getCORSData = async (url) => {
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+    const response = await axios.get(proxyUrl);
+    return JSON.parse(response.data.contents);
+  };
+
   const checkAllStatus = async () => {
     const allIds = Object.values(streamers).flat();
     const checkPromises = allIds.map(async (bjid) => {
       try {
-        const liveRes = await axios.post(`/api-soop/afreeca/player_live_api.php?bjid=${bjid}`, 
-          new URLSearchParams({ bid: bjid, type: 'live', player_type: 'html5' }), 
-          { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-        );
+        // 1. 방송 여부 체크 (GET 방식으로 변경하여 프록시 최적화)
+        const liveUrl = `https://live.sooplive.co.kr/afreeca/player_live_api.php?bjid=${bjid}&bid=${bjid}&type=live&player_type=html5`;
+        const data = await getCORSData(liveUrl);
 
-        if (liveRes.data?.CHANNEL?.RESULT === 1) {
-          const channel = liveRes.data.CHANNEL;
+        if (data?.CHANNEL?.RESULT === 1) {
+          const channel = data.CHANNEL;
           const broadNo = channel.BNO;
+          
           try {
-            const stationRes = await axios.get(`/api-ch/api/${bjid}/station`);
-            const broadData = stationRes.data?.broad;
+            // 2. 상세 정보 가져오기
+            const stationUrl = `https://chapi.sooplive.co.kr/api/${bjid}/station`;
+            const stationData = await getCORSData(stationUrl);
+            const broadData = stationData?.broad;
+
             return {
               id: bjid,
               nick: channel.BJNICK,
