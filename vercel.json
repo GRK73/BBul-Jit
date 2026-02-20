@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api-soop/:path*",
+      "destination": "https://live.sooplive.co.kr/:path*"
+    },
+    {
+      "source": "/api-ch/:path*",
+      "destination": "https://chapi.sooplive.co.kr/:path*"
+    }
+  ]
+}

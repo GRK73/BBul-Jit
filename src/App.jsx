@@ -29,87 +29,46 @@ const GlitteringLogo = ({ sizeClass = "text-[6rem] md:text-[10rem]" }) => (
 const App = () => {
   const [liveStreamers, setLiveStreamers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [updateTime, setUpdateTime] = useState("");
 
-  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-
-  const fetchWithSmartProxy = async (bjid) => {
-    // 모바일 API 경로가 보안이 더 느슨함
-    const liveUrl = `https://live.sooplive.co.kr/afreeca/player_live_api.php?bjid=${bjid}&bid=${bjid}&type=live&player_type=html5`;
+  const checkAllStatus = async () => {
+    const allIds = Object.values(streamers).flat();
     
-    if (isLocal) {
+    const checkPromises = allIds.map(async (bjid) => {
       try {
+        // Vercel의 rewrites 덕분에 로컬과 배포 환경 주소가 동일해집니다.
         const res = await axios.post(`/api-soop/afreeca/player_live_api.php?bjid=${bjid}`, 
           new URLSearchParams({ bid: bjid, type: 'live', player_type: 'html5' }), 
           { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
         );
+        
         if (res.data?.CHANNEL?.RESULT === 1) {
           const sRes = await axios.get(`/api-ch/api/${bjid}/station`);
-          return { id: bjid, nick: res.data.CHANNEL.BJNICK, title: res.data.CHANNEL.TITLE, viewer: sRes.data?.broad?.visitor_cnt || "LIVE", thumb: `https://liveimg.sooplive.co.kr/m/${res.data.CHANNEL.BNO}?v=${Date.now()}` };
-        }
-      } catch (e) { return null; }
-    }
-
-    // [배포 환경 전용] 검증된 RAW 프록시 사용
-    const proxies = [
-      (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-      (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
-    ];
-
-    for (const getProxyUrl of proxies) {
-      try {
-        const res = await fetch(getProxyUrl(liveUrl));
-        if (!res.ok) continue;
-        const data = await res.json();
-        
-        if (data?.CHANNEL?.RESULT === 1) {
-          const channel = data.CHANNEL;
           return {
             id: bjid,
-            nick: channel.BJNICK,
-            title: channel.TITLE,
-            viewer: "LIVE",
-            thumb: `https://liveimg.sooplive.co.kr/m/${channel.BNO}?v=${Date.now()}`
+            nick: res.data.CHANNEL.BJNICK,
+            title: res.data.CHANNEL.TITLE,
+            viewer: sRes.data?.broad?.visitor_cnt || "LIVE",
+            thumb: `https://liveimg.sooplive.co.kr/m/${res.data.CHANNEL.BNO}?v=${Date.now()}`
           };
         }
-        if (data) break;
-      } catch (e) { continue; }
-    }
-    return null;
-  };
+      } catch (e) { console.error(e); }
+      return null;
+    });
 
-  const checkAllStatus = async () => {
-    const allIds = Object.values(streamers).flat();
-    const results = [];
-    
-    // 배포 환경은 3명씩 천천히 (차단 방지)
-    const chunkSize = isLocal ? allIds.length : 3;
-    for (let i = 0; i < allIds.length; i += chunkSize) {
-      const chunk = allIds.slice(i, i + chunkSize);
-      const promises = chunk.map(id => fetchWithSmartProxy(id));
-      const chunkResults = await Promise.all(promises);
-      results.push(...chunkResults.filter(r => r !== null));
-      if (!isLocal) await new Promise(r => setTimeout(r, 1000));
-    }
-
-    setLiveStreamers(results);
+    const results = await Promise.all(checkPromises);
+    setLiveStreamers(results.filter(r => r !== null));
     setLoading(false);
-    setUpdateTime(new Date().toLocaleTimeString());
   };
 
   useEffect(() => {
     checkAllStatus();
-    const interval = isLocal ? 30000 : 180000;
-    const timer = setInterval(checkAllStatus, interval);
+    const timer = setInterval(checkAllStatus, 60000);
     return () => clearInterval(timer);
   }, []);
 
   if (loading) return (
     <div className="min-h-screen bg-black flex items-center justify-center text-white font-planb">
-      <div className="text-center">
-        <div className="text-4xl animate-pulse mb-4 tracking-widest text-white">PLAN.B</div>
-        <div className="text-[10px] font-sans opacity-40 tracking-[0.5em] uppercase">Checking Live Streamers...</div>
-      </div>
+      <div className="text-4xl animate-pulse tracking-widest">PLAN.B</div>
     </div>
   );
 
@@ -124,7 +83,6 @@ const App = () => {
               Currently Offline
             </p>
             <div className="h-[1px] w-24 bg-white/20"></div>
-            <p className="text-[10px] text-gray-600 mt-4 tracking-widest uppercase italic">Checked at {updateTime}</p>
           </div>
         </div>
       ) : (
@@ -162,7 +120,6 @@ const App = () => {
               </StarBorder>
             ))}
           </div>
-          <p className="text-center text-[10px] text-gray-600 mt-20 tracking-widest uppercase">System Operational // Last Sync: {updateTime}</p>
         </div>
       )}
     </div>
