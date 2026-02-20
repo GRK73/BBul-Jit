@@ -1,6 +1,6 @@
 {
-  "short_name": "PLAN.B Live",
-  "name": "PLAN.B Streamer Status",
+  "short_name": "PLAN.B",
+  "name": "PLAN.B Live Status",
   "icons": [
     {
       "src": "icon-192.png",
@@ -21,8 +21,9 @@
       "purpose": "any"
     }
   ],
-  "start_url": "/",
+  "start_url": ".",
   "display": "standalone",
   "theme_color": "#000000",
-  "background_color": "#000000"
+  "background_color": "#000000",
+  "id": "/"
 }

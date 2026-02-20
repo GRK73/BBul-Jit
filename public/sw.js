@@ -1,7 +1,17 @@
-self.addEventListener('install', (e) => {
-  console.log('[Service Worker] Install');
+const CACHE_NAME = 'planb-cache-v1';
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(['/']);
+    })
+  );
 });
 
-self.addEventListener('fetch', (e) => {
-  // 앱 설치를 위해 필요한 최소한의 fetch 이벤트 리스너
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    caches.match(event.request).then((response) => {
+      return response || fetch(event.request);
+    })
+  );
 });
