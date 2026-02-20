@@ -1,380 +1,87 @@
 <!DOCTYPE html>
 <html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>일정표</title>
-    <!-- html2canvas 라이브러리 -->
-    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @font-face {
-            font-family: 'planb';
-            src: url('planb.dc617619.otf') format('opentype');
-        }
+      @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@100;400;700;900&display=swap');
+      
+      @font-face {
+        font-family: 'planb';
+        src: url('/planb.otf') format('opentype');
+      }
 
-        :root {
-            --color-1: #31982f;
-            --color-2: #0070bf;
-            --color-3: #cc7d15;
-            --color-4: #6c2c9a;
-            --bg-dark: #000000;
-            --border-white: #ffffff;
-            --text-white: #ffffff;
-        }
+      body {
+        margin: 0;
+        background-color: black;
+        font-family: 'Pretendard', sans-serif;
+      }
 
-        body {
-            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
-            margin: 20px;
-            background-color: #333;
-            color: var(--text-white);
-        }
+      .font-planb {
+        font-family: 'planb', sans-serif !important;
+      }
 
-        #capture-area {
-            background-color: var(--bg-dark);
-            padding: 40px;
-            border: 2px solid var(--border-white);
-            width: 1000px;
-            margin: 0 auto;
-            box-sizing: border-box;
-            position: relative;
-        }
+      /* --- GLITCH (Glittering) Effect --- */
+      .stack {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
 
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 25px;
-            height: 60px;
-        }
+      .stack span {
+        font-family: 'planb', sans-serif;
+        grid-row-start: 1;
+        grid-column-start: 1;
+        --stack-height: calc(100% / var(--stacks) - 1px);
+        --inverse-index: calc(calc(var(--stacks) - 1) - var(--index));
+        --clip-top: calc(var(--stack-height) * var(--index));
+        --clip-bottom: calc(var(--stack-height) * var(--inverse-index));
+        clip-path: inset(var(--clip-top) 0 var(--clip-bottom) 0);
+        animation: stack 340ms cubic-bezier(.46,.29,0,1.24) 1 backwards calc(var(--index) * 120ms), glitch 2s ease infinite 2s alternate-reverse;
+      }
 
-        .title-section {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
+      .stack span:nth-child(odd) { --glitch-translate: 8px; }
+      .stack span:nth-child(even) { --glitch-translate: -8px; }
 
-        .editable-title {
-            font-size: 30px;
-            font-weight: bold;
-            border: none;
-            outline: none;
-            padding: 0 10px;
-            background: transparent;
-            color: var(--text-white);
-            min-width: 50px;
-            display: inline-block;
-            line-height: 1;
-            font-family: 'Pretendard', sans-serif;
-        }
+      @keyframes stack {
+        0% { opacity: 0; transform: translateX(-50%); text-shadow: -2px 3px 0 red, 2px -3px 0 blue; }
+        60% { opacity: 0.5; transform: translateX(50%); }
+        80% { transform: none; opacity: 1; text-shadow: 2px -3px 0 red, -2px 3px 0 blue; }
+        100% { text-shadow: none; }
+      }
 
-        .calendar-grid {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            border-top: 1px solid var(--border-white);
-            border-left: 1px solid var(--border-white);
-        }
+      @keyframes glitch {
+        0% { text-shadow: -2px 3px 0 red, 2px -3px 0 blue; transform: translate(var(--glitch-translate)); }
+        2% { text-shadow: 2px -3px 0 red, -2px 3px 0 blue; }
+        4%, 100% { text-shadow: none; transform: none; }
+      }
 
-        .day-header {
-            padding: 5px;
-            text-align: center;
-            font-weight: bold;
-            border-bottom: 1px solid var(--border-white);
-            border-right: 1px solid var(--border-white);
-            background-color: #111;
-            font-size: 14px;
-            color: var(--text-white);
-        }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
 
-        .day-cell {
-            height: 110px;
-            border-bottom: 1px solid var(--border-white);
-            border-right: 1px solid var(--border-white);
-            padding: 2px 10px 10px 10px;
-            position: relative;
-            cursor: pointer;
-            transition: opacity 0.2s;
-            background-color: var(--bg-dark);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            text-align: center;
-            box-sizing: border-box;
-        }
+      .animate-spin-slow {
+        animation: spin 10s linear infinite;
+      }
 
-        .day-cell:hover { opacity: 0.8; }
-        .day-cell.sunday .date-num { color: #ff6b6b; }
-        .day-cell.saturday .date-num { color: #4dabf7; }
+      /* 제목 페이드 효과 */
+      .title-container {
+        position: relative;
+        overflow: hidden;
+        white-space: nowrap;
+        mask-image: linear-gradient(to right, black 85%, transparent 100%);
+        -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+      }
 
-        .date-num {
-            font-weight: bold;
-            font-size: 18px;
-            margin-bottom: 5px;
-            color: var(--text-white);
-        }
-
-        .schedule-text {
-            font-size: 12px;
-            font-weight: bold;
-            white-space: pre-wrap;
-            word-break: break-all;
-            color: white;
-            line-height: 1.4;
-        }
-
-        .controls {
-            width: 1000px;
-            margin: 20px auto;
-            display: flex; gap: 10px; justify-content: center;
-        }
-
-        button {
-            padding: 10px 20px;
-            cursor: pointer;
-            border: 1px solid #666;
-            border-radius: 4px;
-            background-color: #222;
-            color: white;
-            font-weight: bold;
-        }
-
-        button:hover { background-color: #444; }
-        button.save-btn { background-color: #1a5c2a; border-color: #28a745; }
-        button.export-btn { background-color: #0b4a8f; border-color: #007bff; }
-
-        #modal {
-            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: #fff; color: #333; padding: 20px; box-shadow: 0 0 30px rgba(0,0,0,0.5);
-            border-radius: 8px; z-index: 1000; width: 380px;
-        }
-
-        .modal-overlay {
-            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.7); z-index: 999;
-        }
-
-        .category-list { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 15px 0; }
-        .category-item { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; color: #333; }
-        .category-item:hover { background-color: #f0f0f0; }
-        .category-item.selected { border: 2px solid #000; background-color: #e9ecef; }
-        .color-dot { width: 18px; height: 18px; border-radius: 50%; }
-
-        textarea {
-            width: 100%; height: 100px; margin-top: 10px; padding: 10px; box-sizing: border-box;
-            border: 1px solid #ccc; border-radius: 4px; font-family: inherit;
-        }
-
-        .logo-container {
-            position: absolute; top: 18px; right: 40px; display: flex; flex-direction: column;
-            align-items: center; transform: scale(0.3); transform-origin: right center;
-        }
-
-        .logo-container .logo-inner {
-            display: flex; flex-direction: column; align-items: center; color: #fff;
-            font-family: 'planb', sans-serif; letter-spacing: .1em;
-        }
-
-        .logo-text { font-weight: 900; font-size: 4rem; margin: 0; padding: 0; line-height: 1; }
-        .logo-container .substack { display: flex; flex-direction: row; justify-content: space-between; align-items: center; width: 100%; margin-top: -5px; }
-
-        .logo-container .subtext {
-            display: flex; justify-content: center; text-align: center; width: 100%;
-            letter-spacing: .8em; transform: translateX(.4em); font-size: 1.5rem; font-weight: bold;
-        }
-
-        .logo-container .left-deco { transform: translateX(.2em); }
-        .logo-container .right-deco { transform: scaleX(-1) translateX(.3em); }
+      .title-text {
+        display: inline-block;
+      }
     </style>
-</head>
-<body>
-    <div class="controls">
-        <input type="month" id="month-picker">
-        <div style="display: flex; align-items: center; gap: 5px; color: #ccc; font-size: 13px;">
-            제목 색상: <input type="color" id="title-color-picker" value="#ffffff" style="cursor:pointer; width:30px; height:30px; border:none; background:transparent;">
-        </div>
-        <button class="save-btn" onclick="saveData()">저장하기</button>
-        <button class="export-btn" onclick="exportImage()">이미지로 저장</button>
-    </div>
-
-    <div id="capture-area">
-        <div class="header">
-            <div class="title-section">
-                <div contenteditable="true" class="editable-title">2월   |</div>
-            </div>
-            <div class="logo-container">
-                <div class="logo-inner">
-                    <h1 class="logo-text select-none">PLAN.B</h1>
-                    <div class="substack">
-                        <img alt="planb-logo" loading="lazy" width="40" height="40" decoding="async" data-nimg="1" class="left-deco" style="color:transparent" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODEiIGhlaWdodD0iMzAiIHZpZXdCb3g9IjAgMCA4MSAzMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTAgMTZINjNMNjggNUw3MyAyNS41TDc5LjUgMTYiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMyIvPgo8L3N2Zz4K">
-                        <span class="subtext select-none">MUSIC</span>
-                        <img alt="planb-logo" loading="lazy" width="40" height="40" decoding="async" data-nimg="1" class="right-deco" style="color:transparent" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODEiIGhlaWdodD0iMzAiIHZpZXdCb3g9IjAgMCA4MSAzMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTAgMTZINjNMNjggNUw3MyAyNS41TDc5LjUgMTYiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMyIvPgo8L3N2Zz4K">
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="calendar-grid">
-            <div class="day-header" style="color: #0d64a7;">SUNDAY</div><div class="day-header">MONDAY</div><div class="day-header">TUESDAY</div>
-            <div class="day-header">WEDNESDAY</div><div class="day-header">THURSDAY</div><div class="day-header">FRIDAY</div>
-            <div class="day-header" style="color: #0d64a7;">SATURDAY</div>
-        </div>
-        <div class="calendar-grid" id="calendar-body"></div>
-        
-        <div style="margin-top: 15px; color: white; font-size: 12px; font-weight: bold; text-align: left; line-height: 1.6;">
-            * 자세한 일정은 방송 공지 참고<br>
-            * 날짜 기록 기준은 당일 오전 6:00 ~ 다음날 오전 5:59 뱅온 기준입니다.
-        </div>
-
-        <div class="calendar-grid" style="margin-top: 15px; border-bottom: 1px solid var(--border-white); border-right: 1px solid var(--border-white);">
-            <div class="day-cell" style="height: 25px; background-color: #31982f; padding: 0; justify-content: center;"><div class="schedule-text" style="font-size: 10px;">평뱅</div></div>
-            <div class="day-cell" style="height: 25px; background-color: #0070bf; padding: 0; justify-content: center;"><div class="schedule-text" style="font-size: 10px;">짧뱅/비정기</div></div>
-            <div class="day-cell" style="height: 25px; background-color: #cc7d15; padding: 0; justify-content: center;"><div class="schedule-text" style="font-size: 10px;">합방/컨텐츠</div></div>
-            <div class="day-cell" style="height: 25px; background-color: #6c2c9a; padding: 0; justify-content: center;"><div class="schedule-text" style="font-size: 10px;">플랜비 관련</div></div>
-            <div class="day-cell" style="height: 25px; background-color: #872846; padding: 0; justify-content: center;"><div class="schedule-text" style="font-size: 10px;">중요 일정</div></div>
-            <div class="day-cell" style="height: 25px; background-color: #272727; padding: 0; justify-content: center;"><div class="schedule-text" style="font-size: 10px;">휴뱅</div></div>
-            <div class="day-cell" style="height: 25px; background-color: #a58c42; padding: 0; justify-content: center;"><div class="schedule-text" style="font-size: 10px;">연습생 관련</div></div>
-        </div>
-    </div>
-
-    <div class="modal-overlay" id="overlay" onclick="closeModal()"></div>
-    <div id="modal">
-        <h3 id="modal-date-title">일정 추가</h3>
-        <textarea id="schedule-input" placeholder="내용을 입력하세요"></textarea>
-        <div class="category-list" id="category-list">
-            <div class="category-item" data-color="#31982f" data-label="평뱅"><div class="color-dot" style="background: #31982f;"></div> 평뱅</div>
-            <div class="category-item" data-color="#0070bf" data-label="짧뱅/비정기/재택"><div class="color-dot" style="background: #0070bf;"></div> 짧뱅/비정기/재택</div>
-            <div class="category-item" data-color="#cc7d15" data-label="합방/컨텐츠"><div class="color-dot" style="background: #cc7d15;"></div> 합방/컨텐츠</div>
-            <div class="category-item" data-color="#6c2c9a" data-label="플랜비 관련"><div class="color-dot" style="background: #6c2c9a;"></div> 플랜비 관련</div>
-            <div class="category-item" data-color="#872846" data-label="중요 일정"><div class="color-dot" style="background: #872846;"></div> 중요 일정</div>
-            <div class="category-item" data-color="#272727" data-label="휴뱅"><div class="color-dot" style="background: #272727;"></div> 휴뱅</div>
-            <div class="category-item" data-color="#a58c42" data-label="연습생 관련"><div class="color-dot" style="background: #a58c42;"></div> 연습생 관련</div>
-            <div class="category-item" data-color="transparent" data-label="기본(검정)"><div class="color-dot" style="background: #000; border: 1px solid #ccc;"></div> 삭제/기본</div>
-        </div>
-        <button style="width:100%; height:45px; margin-top:10px; font-size:16px;" onclick="applySchedule()">확인</button>
-    </div>
-
-    <script>
-        let currentYear, currentMonth;
-        let scheduleData = {};
-        let selectedDate = null;
-        let selectedColor = "transparent";
-
-        const monthPicker = document.getElementById('month-picker');
-        const calendarBody = document.getElementById('calendar-body');
-        
-        window.onload = () => {
-            const now = new Date();
-            currentYear = now.getFullYear();
-            currentMonth = now.getMonth();
-            monthPicker.value = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
-            loadData();
-            renderCalendar();
-
-            monthPicker.addEventListener('change', (e) => {
-                const [y, m] = e.target.value.split('-');
-                currentYear = parseInt(y); currentMonth = parseInt(m) - 1;
-                document.querySelector('.editable-title').innerText = `${currentMonth + 1}월   |`;
-                renderCalendar();
-            });
-
-            document.querySelectorAll('.category-item').forEach(item => {
-                item.addEventListener('click', () => {
-                    document.querySelectorAll('.category-item').forEach(i => i.classList.remove('selected'));
-                    item.classList.add('selected'); selectedColor = item.dataset.color;
-                });
-            });
-
-            document.getElementById('title-color-picker').addEventListener('input', (e) => {
-                document.execCommand('foreColor', false, e.target.value);
-            });
-        };
-
-        function renderCalendar() {
-            calendarBody.innerHTML = '';
-            const firstDay = new Date(currentYear, currentMonth, 1).getDay();
-            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-
-            for (let i = 0; i < firstDay; i++) {
-                const empty = document.createElement('div'); empty.className = 'day-cell';
-                calendarBody.appendChild(empty);
-            }
-
-            for (let day = 1; day <= daysInMonth; day++) {
-                const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                const cell = document.createElement('div'); cell.className = 'day-cell';
-                const dayOfWeek = new Date(currentYear, currentMonth, day).getDay();
-                if(dayOfWeek === 0) cell.classList.add('sunday');
-                if(dayOfWeek === 6) cell.classList.add('saturday');
-
-                const data = scheduleData[dateKey] || { text: '', color: 'transparent' };
-                cell.style.backgroundColor = data.color === 'transparent' ? 'black' : data.color;
-
-                const dateNum = document.createElement('div'); dateNum.className = 'date-num'; dateNum.innerText = day;
-                const textDiv = document.createElement('div'); textDiv.className = 'schedule-text'; textDiv.innerText = data.text;
-
-                cell.appendChild(dateNum); cell.appendChild(textDiv);
-                cell.onclick = () => openModal(dateKey);
-                calendarBody.appendChild(cell);
-            }
-        }
-
-        function openModal(dateKey) {
-            selectedDate = dateKey;
-            const data = scheduleData[dateKey] || { text: '', color: 'transparent' };
-            document.getElementById('modal-date-title').innerText = `${dateKey}`;
-            document.getElementById('schedule-input').value = data.text;
-            document.querySelectorAll('.category-item').forEach(i => {
-                i.classList.remove('selected');
-                if(i.dataset.color === data.color) i.classList.add('selected');
-            });
-            selectedColor = data.color;
-            document.getElementById('modal').style.display = 'block';
-            document.getElementById('overlay').style.display = 'block';
-        }
-
-        function closeModal() {
-            document.getElementById('modal').style.display = 'none';
-            document.getElementById('overlay').style.display = 'none';
-        }
-
-        function applySchedule() {
-            const text = document.getElementById('schedule-input').value;
-            if (selectedColor === 'transparent' && text === '') {
-                delete scheduleData[selectedDate];
-            } else {
-                scheduleData[selectedDate] = { text, color: selectedColor };
-            }
-            renderCalendar(); closeModal();
-        }
-
-        function saveData() {
-            const titleHTML = document.querySelector('.editable-title').innerHTML;
-            const titleColor = document.getElementById('title-color-picker').value;
-            const fullData = { titleHTML, titleColor, schedules: scheduleData };
-            localStorage.setItem('gemini_calendar_data_black', JSON.stringify(fullData));
-            alert('저장되었습니다.');
-        }
-
-        function loadData() {
-            const saved = localStorage.getItem('gemini_calendar_data_black');
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                if (parsed.titleHTML) { document.querySelector('.editable-title').innerHTML = parsed.titleHTML; }
-                else { document.querySelector('.editable-title').innerText = parsed.title || "2월   |"; }
-                const color = parsed.titleColor || "#ffffff";
-                document.getElementById('title-color-picker').value = color;
-                scheduleData = parsed.schedules || {};
-            }
-        }
-
-        async function exportImage() {
-            const area = document.getElementById('capture-area');
-            try {
-                await document.fonts.ready;
-                const canvas = await html2canvas(area, { scale: 2, useCORS: true, backgroundColor: "#000", logging: true });
-                const link = document.createElement('a'); link.download = `schedule.png`;
-                link.href = canvas.toDataURL('image/png'); link.click();
-            } catch (err) { alert("이미지 저장 중 오류가 발생했습니다."); }
-        }
-    </script>
-</body>
+    <title>PLAN.B - LIVE STATUS</title>
+  </head>
+  <body class="bg-black text-white overflow-x-hidden">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>
