@@ -32,61 +32,69 @@ const App = () => {
   const [liveStreamers, setLiveStreamers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 더 안전한 CORS 데이터 요청 함수
-  const getCORSData = async (url) => {
-    try {
-      // 캐시 방지를 위해 랜덤 쿼리 추가
-      const finalUrl = `${url}${url.includes('?') ? '&' : '?'}_cache=${Date.now()}`;
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(finalUrl)}`;
-      const response = await axios.get(proxyUrl);
-      
-      const contents = response.data.contents;
-      // 데이터가 문자열이면 파싱, 이미 객체면 그대로 반환
-      return typeof contents === 'string' ? JSON.parse(contents) : contents;
-    } catch (e) {
-      console.error(`Proxy request failed for ${url}`, e);
-      return null;
-    }
-  };
+  // 로컬 여부 확인
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
   const checkAllStatus = async () => {
     const allIds = Object.values(streamers).flat();
-    const results = [];
     
-    // [중요] 한꺼번에 요청하지 않고 순차적으로 요청하여 안정성 확보
-    for (const bjid of allIds) {
+    const checkPromises = allIds.map(async (bjid) => {
       try {
-        const liveUrl = `https://live.sooplive.co.kr/afreeca/player_live_api.php?bjid=${bjid}&bid=${bjid}&type=live&player_type=html5`;
-        const data = await getCORSData(liveUrl);
+        let liveData;
+        
+        if (isLocal) {
+          // [로컬] Vite Proxy + POST 요청
+          const res = await axios.post(`/api-soop/afreeca/player_live_api.php?bjid=${bjid}`, 
+            new URLSearchParams({ bid: bjid, type: 'live', player_type: 'html5' }), 
+            { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+          );
+          liveData = res.data;
+        } else {
+          // [배포] CORS 프록시 사용
+          const url = `https://live.sooplive.co.kr/afreeca/player_live_api.php?bjid=${bjid}&bid=${bjid}&type=live&player_type=html5`;
+          const res = await axios.get(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}&_=${Date.now()}`);
+          const contents = res.data.contents;
+          liveData = typeof contents === 'string' ? JSON.parse(contents) : contents;
+        }
 
-        if (data?.CHANNEL?.RESULT === 1) {
-          const channel = data.CHANNEL;
+        if (liveData?.CHANNEL?.RESULT === 1) {
+          const channel = liveData.CHANNEL;
           const broadNo = channel.BNO;
           
-          // 채널 정보도 가져오기 (시청자 수용)
-          const stationUrl = `https://chapi.sooplive.co.kr/api/${bjid}/station`;
-          const stationData = await getCORSData(stationUrl);
-          
-          results.push({
+          let viewer = "LIVE";
+          try {
+            const stationUrl = `https://chapi.sooplive.co.kr/api/${bjid}/station`;
+            if (isLocal) {
+              const sRes = await axios.get(`/api-ch/api/${bjid}/station`);
+              viewer = sRes.data?.broad?.visitor_cnt || "LIVE";
+            } else {
+              const sRes = await axios.get(`https://api.allorigins.win/get?url=${encodeURIComponent(stationUrl)}`);
+              const sContents = sRes.data.contents;
+              const sData = typeof sContents === 'string' ? JSON.parse(sContents) : sContents;
+              viewer = sData?.broad?.visitor_cnt || "LIVE";
+            }
+          } catch (e) {}
+
+          return {
             id: bjid,
             nick: channel.BJNICK,
             title: channel.TITLE,
-            viewer: stationData?.broad?.visitor_cnt || "LIVE",
+            viewer: viewer,
             thumb: `https://liveimg.sooplive.co.kr/m/${broadNo}?v=${Date.now()}`
-          });
+          };
         }
-      } catch (e) {
-        console.warn(`Failed to check ${bjid}`, e);
-      }
-    }
-    
-    setLiveStreamers(results);
+      } catch (e) { console.error(e); }
+      return null;
+    });
+
+    const results = await Promise.all(checkPromises);
+    setLiveStreamers(results.filter(r => r !== null));
     setLoading(false);
   };
 
   useEffect(() => {
     checkAllStatus();
-    const timer = setInterval(checkAllStatus, 60000); // 1분마다 갱신 (프록시 부하 방지)
+    const timer = setInterval(checkAllStatus, isLocal ? 30000 : 120000);
     return () => clearInterval(timer);
   }, []);
 
