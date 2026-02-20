@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import streamers from '../streamers.json';
 import StarBorder from './components/StarBorder';
+import { streamerConfig } from './streamerConfig';
 
 const DecoIcon = () => (
   <svg width="40" height="24" viewBox="0 0 81 30" fill="none" className="opacity-80 md:w-[50px] md:h-[30px]">
@@ -40,9 +41,11 @@ const App = () => {
         );
         if (res.data?.CHANNEL?.RESULT === 1) {
           const sRes = await axios.get(`/api-ch/api/${bjid}/station`);
+          const info = streamerConfig[bjid] || {};
           return {
             id: bjid,
-            nick: res.data.CHANNEL.BJNICK,
+            nick: info.name || res.data.CHANNEL.BJNICK,
+            category: info.category || "",
             title: res.data.CHANNEL.TITLE,
             viewer: sRes.data?.broad?.visitor_cnt || "LIVE",
             thumb: `https://liveimg.sooplive.co.kr/m/${res.data.CHANNEL.BNO}?v=${Date.now()}`
@@ -106,8 +109,9 @@ const App = () => {
                     <img src={streamer.thumb} alt="live" className="w-full h-full object-cover grayscale group-hover:grayscale-0 group-hover:scale-110 transition-all duration-1000 ease-out" />
                   </div>
                   <div className="p-4 md:p-10">
-                    <div className="mb-2 md:mb-6">
-                      <h3 className="text-lg md:text-4xl font-black tracking-tighter font-planb truncate">{streamer.nick}</h3>
+                    <div className="mb-2 md:mb-6 flex items-baseline justify-between gap-2 overflow-hidden">
+                      <h3 className="text-lg md:text-4xl font-black tracking-tighter font-planb truncate flex-shrink-1">{streamer.nick}</h3>
+                      <span className="text-[10px] md:text-sm text-white/40 font-bold whitespace-nowrap flex-shrink-0">{streamer.category}</span>
                     </div>
                     <div className="h-[1px] w-8 md:w-12 bg-white/30 mb-3 md:mb-8 group-hover:w-full transition-all duration-1000 ease-in-out"></div>
                     <div className="title-container mb-4 md:mb-12 h-5 md:h-8 flex items-center">
