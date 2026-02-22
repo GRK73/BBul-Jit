@@ -1,4 +1,4 @@
-const bjid = 'rose0957';
+const bjid = 'navixx';
 const url = `https://live.sooplive.co.kr/afreeca/player_live_api.php?bjid=${bjid}`;
 
 const body = new URLSearchParams({
