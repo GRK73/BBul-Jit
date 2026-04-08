@@ -1,11 +1,7 @@
 export const streamerConfig = {
   "bambe53": { name: "밤베", category: "연습생 1기" },
   "yumroro": { name: "윰로로", category: "연습생 1기" },
-  "ch1ch1r0": { name: "찌로", category: "연습생 1기" },
-  "peuhaha": { name: "프하", category: "연습생 1기" },
-  "hobal115end": { name: "호발", category: "연습생 1기" },
   "swcmnb67": { name: "공도리", category: "연습생 2기" },
-  "kangturtle": { name: "한세현", category: "연습생 2기" },
   "somnnya": { name: "김솜냐", category: "연습생 3기" },
   "likethis1125": { name: "도페", category: "연습생 3기" },
   "runna11": { name: "룬나", category: "연습생 3기" },
@@ -18,12 +14,16 @@ export const streamerConfig = {
   "sayseram2": { name: "윤세람", category: "연습생 3기" },
   "bluejin0129": { name: "지오", category: "연습생 3기" },
   "zzeogoo": { name: "햄쩌구", category: "연습생 3기" },
+  "whtndus0830": { name: "쪼아나", category: "연습생 3기" },
   "rose0957": { name: "한세긴", category: "플랜비" },
   "navixx": { name: "나비", category: "플랜비" },
   "s07o24": { name: "송밤", category: "플랜비" },
   "9wang2": { name: "크앙희", category: "플랜비" },
   "vmsystem": { name: "서스스_공식", category: "대표" },
   "bver99": { name: "빕어", category: "사장" },
-  "daniyan1030": { name: "다니얀", category: "파트너" },
-  "bamsaena": { name: "밤새나", category: "파트너" }
+  "ch1ch1r0": { name: "찌로", category: "BIP" },
+  "hobal115end": { name: "호발", category: "BIP" },
+  "kangturtle": { name: "한세현", category: "BIP" },
+  "daniyan1030": { name: "다니얀", category: "BIP" },
+  "bamsaena": { name: "밤새나", category: "BIP" }
 };
