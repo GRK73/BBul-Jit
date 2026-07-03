@@ -3,6 +3,7 @@
   display: block;
   width: 100%;
   height: 100%;
+  border-radius: inherit;
 }
 
 .eb-canvas-container {
@@ -35,6 +36,11 @@
   transition: opacity 0.3s ease;
 }
 
+.eb-layers {
+  border-radius: inherit;
+  overflow: hidden;
+}
+
 .group:hover .eb-glow-1,
 .group:hover .eb-glow-2 {
   opacity: 1;
@@ -65,4 +71,5 @@
   background: black;
   border-radius: inherit;
   overflow: hidden;
+  transform: translateZ(0);
 }

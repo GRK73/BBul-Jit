@@ -14,6 +14,8 @@ const CATEGORY_OPTIONS = [
   { key: 'Others', label: '기타' }
 ];
 
+const SHOW_ELECTRIC_TEST_CARD = true;
+
 const streamerCategoryById = Object.entries(streamers).reduce((acc, [category, ids]) => {
   ids.forEach(id => {
     acc[id] = category;
@@ -171,7 +173,7 @@ const App = () => {
   return (
     <div className="min-h-screen bg-black text-white font-sans overflow-x-hidden selection:bg-white selection:text-black">
       {categoryFilter}
-      {liveStreamers.length === 0 ? (
+      {liveStreamers.length === 0 && !SHOW_ELECTRIC_TEST_CARD ? (
         // [OFFLINE MODE]
         <div className="h-screen flex flex-col items-center justify-center px-6">
           <div className="scale-90 md:scale-100">
@@ -199,7 +201,7 @@ const App = () => {
           </div>
           
           {/* 모바일에서 grid-cols-2 적용 */}
-          {filteredLiveStreamers.length === 0 ? (
+          {filteredLiveStreamers.length === 0 && !SHOW_ELECTRIC_TEST_CARD ? (
             <div className="flex min-h-[40vh] flex-col items-center justify-center gap-6 text-center">
               <div className="h-[1px] w-16 md:w-24 bg-white/20"></div>
               <p className="text-white/70 tracking-[0.4em] md:tracking-[0.8em] text-sm md:text-lg font-black uppercase leading-relaxed">
@@ -222,7 +224,7 @@ const App = () => {
                       className="group w-full shadow-2xl"
                       borderRadius={32}
                     >
-                      <div className="bg-[#030303]">
+                      <div className="h-full rounded-[inherit] overflow-hidden bg-[#030303]">
                         <div className="aspect-video w-full bg-[#0a0a0a] overflow-hidden relative border-b border-white/5">
                           <img src={streamer.thumb} alt="live" className="w-full h-full object-cover grayscale group-hover:grayscale-0 group-hover:scale-110 transition-all duration-1000 ease-out" />
                         </div>
@@ -273,6 +275,19 @@ const App = () => {
                 </StarBorder>
               );
             })}
+            {SHOW_ELECTRIC_TEST_CARD ? (
+              <div className="relative p-2" aria-label="Electric border test card">
+                <ElectricBorder
+                  color="#7df9ff"
+                  speed={1}
+                  chaos={0.12}
+                  className="group w-full shadow-2xl"
+                  borderRadius={32}
+                >
+                  <div className="min-h-[220px] md:min-h-[420px] rounded-[inherit] bg-[#030303]" />
+                </ElectricBorder>
+              </div>
+            ) : null}
           </div>
           )}
         </div>
