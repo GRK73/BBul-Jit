@@ -60,31 +60,37 @@ const CategoryFilter = React.memo(({ isOpen, selectedCategories, onToggleMenu, o
       </span>
     </button>
 
-    {isOpen ? (
-      <div className="w-36 md:w-44 rounded-2xl border border-white/15 bg-black/80 p-2 shadow-2xl backdrop-blur-xl">
-        <div className="grid gap-1.5">
-          {CATEGORY_OPTIONS.map(category => {
-            const selected = selectedCategories.includes(category.key);
-            return (
-              <button
-                key={category.key}
-                type="button"
-                onClick={() => onToggleCategory(category.key)}
-                aria-pressed={selected}
-                className={`flex h-9 items-center justify-between rounded-xl border px-3 text-xs md:text-sm font-black transition-all duration-300 ${
-                  selected
-                    ? 'border-white bg-white text-black'
-                    : 'border-white/10 bg-white/5 text-white/55 hover:border-white/30 hover:text-white'
-                }`}
-              >
-                <span>{category.label}</span>
-                <span className={`h-2 w-2 rounded-full ${selected ? 'bg-black' : 'bg-white/25'}`}></span>
-              </button>
-            );
-          })}
-        </div>
+    <div
+      aria-hidden={!isOpen}
+      className={`w-36 md:w-44 rounded-2xl border border-transparent bg-transparent p-2 shadow-none backdrop-blur-none transform-gpu transition-all duration-500 ease-out ${
+        isOpen
+          ? 'translate-x-0 opacity-100'
+          : '-translate-x-[calc(100%+2rem)] opacity-0 pointer-events-none'
+      }`}
+    >
+      <div className="grid gap-1.5">
+        {CATEGORY_OPTIONS.map(category => {
+          const selected = selectedCategories.includes(category.key);
+          return (
+            <button
+              key={category.key}
+              type="button"
+              onClick={() => onToggleCategory(category.key)}
+              aria-pressed={selected}
+              tabIndex={isOpen ? 0 : -1}
+              className={`flex h-9 items-center justify-between rounded-xl border px-3 text-xs md:text-sm font-black transition-all duration-300 ${
+                selected
+                  ? 'border-white bg-white text-black'
+                  : 'border-white/10 bg-white/5 text-white/55 hover:border-white/30 hover:text-white'
+              }`}
+            >
+              <span>{category.label}</span>
+              <span className={`h-2 w-2 rounded-full ${selected ? 'bg-black' : 'bg-white/25'}`}></span>
+            </button>
+          );
+        })}
       </div>
-    ) : null}
+    </div>
   </div>
 ));
 
