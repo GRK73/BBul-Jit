@@ -14,8 +14,6 @@ const CATEGORY_OPTIONS = [
   { key: 'Others', label: '기타' }
 ];
 
-const SHOW_ELECTRIC_TEST_CARD = true;
-
 const streamerCategoryById = Object.entries(streamers).reduce((acc, [category, ids]) => {
   ids.forEach(id => {
     acc[id] = category;
@@ -173,7 +171,7 @@ const App = () => {
   return (
     <div className="min-h-screen bg-black text-white font-sans overflow-x-hidden selection:bg-white selection:text-black">
       {categoryFilter}
-      {liveStreamers.length === 0 && !SHOW_ELECTRIC_TEST_CARD ? (
+      {liveStreamers.length === 0 ? (
         // [OFFLINE MODE]
         <div className="h-screen flex flex-col items-center justify-center px-6">
           <div className="scale-90 md:scale-100">
@@ -201,7 +199,7 @@ const App = () => {
           </div>
           
           {/* 모바일에서 grid-cols-2 적용 */}
-          {filteredLiveStreamers.length === 0 && !SHOW_ELECTRIC_TEST_CARD ? (
+          {filteredLiveStreamers.length === 0 ? (
             <div className="flex min-h-[40vh] flex-col items-center justify-center gap-6 text-center">
               <div className="h-[1px] w-16 md:w-24 bg-white/20"></div>
               <p className="text-white/70 tracking-[0.4em] md:tracking-[0.8em] text-sm md:text-lg font-black uppercase leading-relaxed">
@@ -275,19 +273,6 @@ const App = () => {
                 </StarBorder>
               );
             })}
-            {SHOW_ELECTRIC_TEST_CARD ? (
-              <div className="relative p-2" aria-label="Electric border test card">
-                <ElectricBorder
-                  color="#7df9ff"
-                  speed={1}
-                  chaos={0.12}
-                  className="group w-full shadow-2xl"
-                  borderRadius={32}
-                >
-                  <div className="min-h-[220px] md:min-h-[420px] rounded-[inherit] bg-[#030303]" />
-                </ElectricBorder>
-              </div>
-            ) : null}
           </div>
           )}
         </div>
