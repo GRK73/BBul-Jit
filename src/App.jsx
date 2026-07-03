@@ -1,9 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
 import streamers from '../streamers.json';
 import StarBorder from './components/StarBorder';
 import ElectricBorder from './components/ElectricBorder';
 import { streamerConfig } from './streamerConfig';
+
+const CATEGORY_OPTIONS = [
+  { key: 'Plan-B', label: '플랜비' },
+  { key: 'BIP', label: 'BIP' },
+  { key: 'Generation 1', label: '1기' },
+  { key: 'Generation 2', label: '2기' },
+  { key: 'Generation 3', label: '3기' },
+  { key: 'Others', label: '기타' }
+];
+
+const streamerCategoryById = Object.entries(streamers).reduce((acc, [category, ids]) => {
+  ids.forEach(id => {
+    acc[id] = category;
+  });
+  return acc;
+}, {});
 
 const DecoIcon = React.memo(() => (
   <svg width="40" height="24" viewBox="0 0 81 30" fill="none" className="opacity-80 md:w-[50px] md:h-[30px]">
@@ -28,9 +44,55 @@ const GlitteringLogo = React.memo(({ sizeClass = "text-[4rem] md:text-[10rem]" }
   </div>
 ));
 
+const CategoryFilter = React.memo(({ isOpen, selectedCategories, onToggleMenu, onToggleCategory }) => (
+  <div className="fixed top-4 left-4 md:top-6 md:left-6 z-50 flex flex-col items-start gap-3">
+    <button
+      type="button"
+      onClick={onToggleMenu}
+      aria-label="카테고리 메뉴"
+      aria-expanded={isOpen}
+      className="flex h-11 w-11 md:h-12 md:w-12 items-center justify-center rounded-full border border-white/20 bg-black/70 text-white shadow-2xl backdrop-blur-md transition-colors duration-300 hover:bg-white hover:text-black"
+    >
+      <span className="flex h-4 w-5 flex-col justify-between" aria-hidden="true">
+        <span className="h-[2px] w-full rounded-full bg-current"></span>
+        <span className="h-[2px] w-full rounded-full bg-current"></span>
+        <span className="h-[2px] w-full rounded-full bg-current"></span>
+      </span>
+    </button>
+
+    {isOpen ? (
+      <div className="w-36 md:w-44 rounded-2xl border border-white/15 bg-black/80 p-2 shadow-2xl backdrop-blur-xl">
+        <div className="grid gap-1.5">
+          {CATEGORY_OPTIONS.map(category => {
+            const selected = selectedCategories.includes(category.key);
+            return (
+              <button
+                key={category.key}
+                type="button"
+                onClick={() => onToggleCategory(category.key)}
+                aria-pressed={selected}
+                className={`flex h-9 items-center justify-between rounded-xl border px-3 text-xs md:text-sm font-black transition-all duration-300 ${
+                  selected
+                    ? 'border-white bg-white text-black'
+                    : 'border-white/10 bg-white/5 text-white/55 hover:border-white/30 hover:text-white'
+                }`}
+              >
+                <span>{category.label}</span>
+                <span className={`h-2 w-2 rounded-full ${selected ? 'bg-black' : 'bg-white/25'}`}></span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    ) : null}
+  </div>
+));
+
 const App = () => {
   const [liveStreamers, setLiveStreamers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
+  const [selectedCategories, setSelectedCategories] = useState(() => CATEGORY_OPTIONS.map(category => category.key));
 
   const checkAllStatus = async () => {
     const allIds = Object.values(streamers).flat();
@@ -45,6 +107,7 @@ const App = () => {
           const info = streamerConfig[bjid] || {};
           return {
             id: bjid,
+            categoryKey: streamerCategoryById[bjid] || 'Others',
             nick: info.name || res.data.CHANNEL.BJNICK,
             category: info.category || "",
             title: res.data.CHANNEL.TITLE,
@@ -67,14 +130,41 @@ const App = () => {
     return () => clearInterval(timer);
   }, []);
 
+  const filteredLiveStreamers = useMemo(() => {
+    return liveStreamers.filter(streamer => selectedCategories.includes(streamer.categoryKey));
+  }, [liveStreamers, selectedCategories]);
+
+  const toggleCategory = useCallback(categoryKey => {
+    setSelectedCategories(current => (
+      current.includes(categoryKey)
+        ? current.filter(key => key !== categoryKey)
+        : [...current, categoryKey]
+    ));
+  }, []);
+
+  const toggleCategoryMenu = useCallback(() => {
+    setCategoryMenuOpen(open => !open);
+  }, []);
+
+  const categoryFilter = (
+    <CategoryFilter
+      isOpen={categoryMenuOpen}
+      selectedCategories={selectedCategories}
+      onToggleMenu={toggleCategoryMenu}
+      onToggleCategory={toggleCategory}
+    />
+  );
+
   if (loading) return (
     <div className="min-h-screen bg-black flex items-center justify-center text-white font-planb">
+      {categoryFilter}
       <div className="text-2xl md:text-4xl animate-pulse tracking-widest text-white">PLAN.B</div>
     </div>
   );
 
   return (
     <div className="min-h-screen bg-black text-white font-sans overflow-x-hidden selection:bg-white selection:text-black">
+      {categoryFilter}
       {liveStreamers.length === 0 ? (
         // [OFFLINE MODE]
         <div className="h-screen flex flex-col items-center justify-center px-6">
@@ -103,8 +193,17 @@ const App = () => {
           </div>
           
           {/* 모바일에서 grid-cols-2 적용 */}
+          {filteredLiveStreamers.length === 0 ? (
+            <div className="flex min-h-[40vh] flex-col items-center justify-center gap-6 text-center">
+              <div className="h-[1px] w-16 md:w-24 bg-white/20"></div>
+              <p className="text-white/70 tracking-[0.4em] md:tracking-[0.8em] text-sm md:text-lg font-black uppercase leading-relaxed">
+                Selected<br className="md:hidden" /> Categories Offline
+              </p>
+              <div className="h-[1px] w-16 md:w-24 bg-white/20"></div>
+            </div>
+          ) : (
           <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-14">
-            {liveStreamers.map(streamer => {
+            {filteredLiveStreamers.map(streamer => {
               const isOvertime = streamer.duration >= 21600; // 6 hours
               
               if (isOvertime) {
@@ -169,6 +268,7 @@ const App = () => {
               );
             })}
           </div>
+          )}
         </div>
       )}
     </div>
