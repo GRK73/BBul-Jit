@@ -565,15 +565,11 @@ const App = () => {
               aria-label={showAllStreamers ? 'Show live streamers' : 'Show all streamers'}
               className="relative flex h-[52px] w-44 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/5 px-6 backdrop-blur-md transition-colors duration-300 hover:bg-white hover:text-black md:h-[58px] md:w-60"
             >
-              <span
-                className={`absolute left-6 h-2 w-2 rounded-full bg-red-600 transition-opacity duration-500 md:left-8 md:h-2.5 md:w-2.5 ${
-                  showAllStreamers ? 'opacity-0' : 'opacity-100 animate-ping'
-                }`}
-              ></span>
-              <span className={`absolute text-xs md:text-sm font-black tracking-[0.4em] md:tracking-[0.6em] uppercase transition-all duration-500 ${
+              <span className={`absolute inline-flex items-center justify-center gap-3 text-xs md:text-sm font-black tracking-[0.4em] md:tracking-[0.6em] uppercase transition-all duration-500 ${
                 showAllStreamers ? '-translate-y-2 opacity-0' : 'translate-y-0 opacity-100'
               }`}>
-                Live Now
+                <span className="h-2 w-2 rounded-full bg-red-600 animate-ping md:h-2.5 md:w-2.5" aria-hidden="true"></span>
+                <span>Live Now</span>
               </span>
               <span className={`absolute text-xs md:text-sm font-black tracking-[0.6em] md:tracking-[0.8em] uppercase transition-all duration-500 ${
                 showAllStreamers ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
