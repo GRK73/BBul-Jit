@@ -7,6 +7,10 @@
     {
       "source": "/api-ch/:path*",
       "destination": "https://chapi.sooplive.co.kr/:path*"
+    },
+    {
+      "source": "/api-channel/:path*",
+      "destination": "https://api-channel.sooplive.co.kr/:path*"
     }
   ]
 }
