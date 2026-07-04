@@ -15,6 +15,15 @@ export default defineConfig({
           'Referer': 'https://www.sooplive.co.kr/'
         }
       },
+      '/api-channel': {
+        target: 'https://api-channel.sooplive.co.kr',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-channel/, ''),
+        headers: {
+          'Origin': 'https://www.sooplive.co.kr',
+          'Referer': 'https://www.sooplive.co.kr/'
+        }
+      },
       '/api-ch': {
         target: 'https://chapi.sooplive.co.kr',
         changeOrigin: true,

@@ -21,6 +21,12 @@ const streamerCategoryById = Object.entries(streamers).reduce((acc, [category, i
   return acc;
 }, {});
 
+const ALL_STREAMER_IDS = Object.values(streamers).flat();
+const streamerOrderById = ALL_STREAMER_IDS.reduce((acc, id, index) => {
+  acc[id] = index;
+  return acc;
+}, {});
+
 const DecoIcon = React.memo(() => (
   <svg width="40" height="24" viewBox="0 0 81 30" fill="none" className="opacity-80 md:w-[50px] md:h-[30px]">
     <path d="M0 16H63L68 5L73 25.5L79.5 16" stroke="white" strokeWidth="3"/>
@@ -99,19 +105,116 @@ const normalizeImageUrl = (url) => {
   return url.startsWith('//') ? `https:${url}` : url;
 };
 
-const StreamerCard = React.memo(({ streamer }) => {
+const stripHtml = (value = '') => String(value)
+  .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+  .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+  .replace(/<br\s*\/?>/gi, ' ')
+  .replace(/<[^>]+>/g, ' ')
+  .replace(/&nbsp;/g, ' ')
+  .replace(/&amp;/g, '&')
+  .replace(/&lt;/g, '<')
+  .replace(/&gt;/g, '>')
+  .replace(/&#39;/g, "'")
+  .replace(/&quot;/g, '"')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const summarizeText = (post) => {
+  const content = post.content || {};
+  return [
+    content.textContent,
+    content.summary,
+    stripHtml(content.content || '')
+  ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+};
+
+const formatPostPreview = (post) => ({
+  id: post.titleNo,
+  title: post.titleName || '제목 없음',
+  content: summarizeText(post) || '내용 없음'
+});
+
+const fetchLatestVod = async (bjid) => {
+  const vodRes = await axios.get(`/api-ch/api/${bjid}/vods?page=1`);
+  const latestVod = vodRes.data?.data?.[0];
+  if (!latestVod?.title_no) return null;
+
+  return {
+    titleNo: latestVod.title_no,
+    title: latestVod.title_name || 'Recent VOD',
+    thumb: normalizeImageUrl(latestVod.ucc?.thumb),
+    url: `https://vod.sooplive.co.kr/player/${latestVod.title_no}`
+  };
+};
+
+const OfflinePostOverlay = React.memo(({ postsState }) => {
+  const posts = postsState?.items || [];
+  const failed = postsState?.status === 'error';
+  const loading = !postsState || postsState.status === 'loading';
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20 flex flex-col justify-end bg-black/88 p-3 md:p-5 opacity-0 transition-all duration-500 ease-out group-hover:opacity-100 group-focus-within:opacity-100">
+      <div className="translate-y-3 transition-transform duration-500 ease-out group-hover:translate-y-0 group-focus-within:translate-y-0">
+        <div className="mb-2 text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] text-white/45">
+          Recent Posts
+        </div>
+        {loading ? (
+          <p className="text-[10px] md:text-xs font-bold text-white/55">게시글 불러오는 중</p>
+        ) : failed ? (
+          <p className="text-[10px] md:text-xs font-bold text-white/70">게시글 가져오기 실패</p>
+        ) : posts.length === 0 ? (
+          <p className="text-[10px] md:text-xs font-bold text-white/55">최근 게시글 없음</p>
+        ) : (
+          <div className="grid gap-2">
+            {posts.map(post => (
+              <div key={post.id} className="min-w-0 border-t border-white/10 pt-2 first:border-t-0 first:pt-0">
+                <p className="truncate text-[10px] md:text-xs font-black text-white">{post.title}</p>
+                <p
+                  className="mt-0.5 overflow-hidden text-[9px] md:text-[11px] leading-snug text-white/55"
+                  style={{
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical'
+                  }}
+                >
+                  {post.content}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+const StreamerCard = React.memo(({ streamer, postsState, onLoadPosts }) => {
   const isOvertime = streamer.isLive && streamer.duration >= 21600; // 6 hours
+  const cardImage = streamer.isLive ? streamer.thumb : streamer.replay?.thumb || streamer.thumb;
+  const cardTitle = streamer.isLive ? streamer.title : streamer.replay?.title || 'Recent replay unavailable';
+  const cardHref = streamer.isLive
+    ? `https://play.sooplive.co.kr/${streamer.id}`
+    : streamer.replay?.url || `https://www.sooplive.co.kr/station/${streamer.id}`;
+  const buttonLabel = 'Connect';
+  const requestPosts = () => {
+    if (!streamer.isLive) onLoadPosts(streamer);
+  };
+
   const cardContent = (
-    <div className="bg-[#030303]">
+    <div
+      className="relative bg-[#030303]"
+      onMouseEnter={requestPosts}
+      onFocus={requestPosts}
+    >
       <div className="aspect-video w-full bg-[#0a0a0a] overflow-hidden relative border-b border-white/5">
-        {streamer.thumb ? (
+        {cardImage ? (
           <img
-            src={streamer.thumb}
+            src={cardImage}
             alt={streamer.isLive ? 'live' : 'offline'}
             className={`w-full h-full transition-all duration-1000 ease-out ${
               streamer.isLive
                 ? 'object-cover grayscale group-hover:grayscale-0 group-hover:scale-110'
-                : 'object-contain p-6 opacity-70 grayscale'
+                : 'object-cover opacity-70 grayscale group-hover:scale-105'
             }`}
           />
         ) : (
@@ -135,24 +238,25 @@ const StreamerCard = React.memo(({ streamer }) => {
         }`}></div>
         <div className="title-container mb-4 md:mb-12 h-5 md:h-8 flex items-center">
           <p className="title-text text-gray-400 text-[10px] md:text-sm font-medium italic opacity-80">
-            "{streamer.isLive ? streamer.title : 'Offline'}"
+            "{cardTitle}"
           </p>
         </div>
         <a
-          href={streamer.isLive ? `https://play.sooplive.co.kr/${streamer.id}` : `https://www.sooplive.co.kr/station/${streamer.id}`}
+          href={cardHref}
           target="_blank"
           rel="noreferrer"
           className="flex items-center justify-center w-full py-3 md:py-5 border border-white/10 bg-white/5 text-white/80 hover:bg-white hover:text-black font-black tracking-[0.1em] md:tracking-[0.2em] transition-all duration-500 rounded-lg md:rounded-2xl text-[8px] md:text-[10px] uppercase font-planb"
         >
-          {streamer.isLive ? 'Connect' : 'Station'}
+          {buttonLabel}
         </a>
       </div>
+      {!streamer.isLive && <OfflinePostOverlay postsState={postsState} />}
     </div>
   );
 
   if (!streamer.isLive) {
     return (
-      <div className="group w-full overflow-hidden rounded-[2rem] border border-white/10 bg-[#030303] shadow-2xl">
+      <div className="group w-full overflow-hidden rounded-[2rem] border border-white/10 bg-[#030303] shadow-2xl transition-all duration-500 ease-out hover:-translate-y-1">
         {cardContent}
       </div>
     );
@@ -189,14 +293,14 @@ const StreamerCard = React.memo(({ streamer }) => {
 
 const App = () => {
   const [streamerStatuses, setStreamerStatuses] = useState([]);
+  const [offlinePostsById, setOfflinePostsById] = useState({});
   const [loading, setLoading] = useState(true);
   const [showAllStreamers, setShowAllStreamers] = useState(false);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState(() => CATEGORY_OPTIONS.map(category => category.key));
 
   const checkAllStatus = async () => {
-    const allIds = Object.values(streamers).flat();
-    const checkPromises = allIds.map(async (bjid) => {
+    const checkPromises = ALL_STREAMER_IDS.map(async (bjid) => {
       try {
         const res = await axios.post(`/api-soop/afreeca/player_live_api.php?bjid=${bjid}`, 
           new URLSearchParams({ bid: bjid, type: 'live', player_type: 'html5' }), 
@@ -218,6 +322,12 @@ const App = () => {
           };
         }
         const stationRes = await axios.get(`/api-ch/api/${bjid}/station`);
+        let replay = null;
+        try {
+          replay = await fetchLatestVod(bjid);
+        } catch (e) {
+          console.error(e);
+        }
         return {
           id: bjid,
           isLive: false,
@@ -227,7 +337,9 @@ const App = () => {
           title: "",
           viewer: "OFFLINE",
           duration: 0,
-          thumb: normalizeImageUrl(stationRes.data?.profile_image)
+          thumb: normalizeImageUrl(stationRes.data?.profile_image),
+          replay,
+          stationMenus: stationRes.data?.station?.menus || []
         };
       } catch (e) { console.error(e); }
       const info = streamerConfig[bjid] || {};
@@ -240,7 +352,9 @@ const App = () => {
         title: "",
         viewer: "OFFLINE",
         duration: 0,
-        thumb: ""
+        thumb: "",
+        replay: null,
+        stationMenus: []
       };
     });
     const results = await Promise.all(checkPromises);
@@ -259,11 +373,81 @@ const App = () => {
   }, [streamerStatuses]);
 
   const displayedStreamers = useMemo(() => {
-    return streamerStatuses.filter(streamer => (
-      selectedCategories.includes(streamer.categoryKey) &&
-      (showAllStreamers || streamer.isLive)
-    ));
+    return streamerStatuses
+      .filter(streamer => (
+        selectedCategories.includes(streamer.categoryKey) &&
+        (showAllStreamers || streamer.isLive)
+      ))
+      .sort((a, b) => {
+        if (showAllStreamers && a.isLive !== b.isLive) return a.isLive ? -1 : 1;
+        return (streamerOrderById[a.id] ?? 0) - (streamerOrderById[b.id] ?? 0);
+      });
   }, [streamerStatuses, selectedCategories, showAllStreamers]);
+
+  const loadOfflinePosts = useCallback(async (streamer) => {
+    if (!streamer || streamer.isLive) return;
+    const currentState = offlinePostsById[streamer.id]?.status;
+    if (currentState === 'loading' || currentState === 'loaded') return;
+
+    setOfflinePostsById(current => ({
+      ...current,
+      [streamer.id]: { status: 'loading', items: [] }
+    }));
+
+    try {
+      const menus = (streamer.stationMenus || [])
+        .filter(menu => Number(menu.display_type) === 104 && menu.bbs_no);
+      const collected = [];
+      let requestCount = 0;
+      let failureCount = 0;
+      const seenPostIds = new Set();
+
+      for (const menu of menus) {
+        try {
+          requestCount += 1;
+          const boardRes = await axios.get(`/api-channel/v1.1/channel/${streamer.id}/board`, {
+            params: {
+              bbsNo: menu.bbs_no,
+              page: 1,
+              perPage: 20
+            }
+          });
+          const posts = boardRes.data?.contents || boardRes.data?.data || [];
+          posts.forEach(post => {
+            if (post.userId !== streamer.id || seenPostIds.has(post.titleNo)) return;
+            seenPostIds.add(post.titleNo);
+            collected.push({
+              ...formatPostPreview(post),
+              regDate: post.regDate || ''
+            });
+          });
+        } catch (e) {
+          failureCount += 1;
+          console.error(e);
+        }
+      }
+
+      if (collected.length === 0 && requestCount > 0 && failureCount === requestCount) {
+        throw new Error('Failed to fetch posts');
+      }
+
+      setOfflinePostsById(current => ({
+        ...current,
+        [streamer.id]: {
+          status: 'loaded',
+          items: collected
+            .sort((a, b) => new Date(b.regDate) - new Date(a.regDate))
+            .slice(0, 5)
+        }
+      }));
+    } catch (e) {
+      console.error(e);
+      setOfflinePostsById(current => ({
+        ...current,
+        [streamer.id]: { status: 'error', items: [] }
+      }));
+    }
+  }, [offlinePostsById]);
 
   const showAllFromOffline = useCallback(() => {
     setShowAllStreamers(true);
@@ -333,13 +517,23 @@ const App = () => {
               type="button"
               onClick={toggleDisplayMode}
               aria-pressed={showAllStreamers}
-              className="flex items-center gap-4 md:gap-6 bg-white/5 border border-white/20 px-6 md:px-10 py-3 md:py-4 rounded-full backdrop-blur-md transition-colors duration-300 hover:bg-white hover:text-black"
+              aria-label={showAllStreamers ? 'Show live streamers' : 'Show all streamers'}
+              className="relative flex h-[52px] w-44 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/5 px-6 backdrop-blur-md transition-colors duration-300 hover:bg-white hover:text-black md:h-[58px] md:w-60"
             >
-              {!showAllStreamers && (
-                <span className="w-2 h-2 md:w-2.5 md:h-2.5 bg-red-600 rounded-full animate-ping"></span>
-              )}
-              <span className="text-xs md:text-sm font-black tracking-[0.4em] md:tracking-[0.6em] uppercase">
-                {showAllStreamers ? 'All' : 'Live Now'}
+              <span
+                className={`absolute left-6 h-2 w-2 rounded-full bg-red-600 transition-opacity duration-500 md:left-8 md:h-2.5 md:w-2.5 ${
+                  showAllStreamers ? 'opacity-0' : 'opacity-100 animate-ping'
+                }`}
+              ></span>
+              <span className={`absolute text-xs md:text-sm font-black tracking-[0.4em] md:tracking-[0.6em] uppercase transition-all duration-500 ${
+                showAllStreamers ? '-translate-y-2 opacity-0' : 'translate-y-0 opacity-100'
+              }`}>
+                Live Now
+              </span>
+              <span className={`absolute text-xs md:text-sm font-black tracking-[0.6em] md:tracking-[0.8em] uppercase transition-all duration-500 ${
+                showAllStreamers ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
+              }`}>
+                All
               </span>
             </button>
           </div>
@@ -354,9 +548,14 @@ const App = () => {
               <div className="h-[1px] w-16 md:w-24 bg-white/20"></div>
             </div>
           ) : (
-          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-14">
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-14 transition-all duration-500 ease-out">
             {displayedStreamers.map(streamer => (
-              <StreamerCard key={streamer.id} streamer={streamer} />
+              <StreamerCard
+                key={streamer.id}
+                streamer={streamer}
+                postsState={offlinePostsById[streamer.id]}
+                onLoadPosts={loadOfflinePosts}
+              />
             ))}
           </div>
           )}
