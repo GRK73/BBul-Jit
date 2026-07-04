@@ -94,9 +94,103 @@ const CategoryFilter = React.memo(({ isOpen, selectedCategories, onToggleMenu, o
   </div>
 ));
 
+const normalizeImageUrl = (url) => {
+  if (!url) return '';
+  return url.startsWith('//') ? `https:${url}` : url;
+};
+
+const StreamerCard = React.memo(({ streamer }) => {
+  const isOvertime = streamer.isLive && streamer.duration >= 21600; // 6 hours
+  const cardContent = (
+    <div className="bg-[#030303]">
+      <div className="aspect-video w-full bg-[#0a0a0a] overflow-hidden relative border-b border-white/5">
+        {streamer.thumb ? (
+          <img
+            src={streamer.thumb}
+            alt={streamer.isLive ? 'live' : 'offline'}
+            className={`w-full h-full transition-all duration-1000 ease-out ${
+              streamer.isLive
+                ? 'object-cover grayscale group-hover:grayscale-0 group-hover:scale-110'
+                : 'object-contain p-6 opacity-70 grayscale'
+            }`}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-white/20 font-planb text-xl md:text-3xl">
+            PLAN.B
+          </div>
+        )}
+        {!streamer.isLive && (
+          <span className="absolute right-3 top-3 rounded-full border border-white/10 bg-black/70 px-2.5 py-1 text-[9px] md:text-[10px] font-black tracking-[0.25em] text-white/50">
+            OFFLINE
+          </span>
+        )}
+      </div>
+      <div className="p-4 md:p-10">
+        <div className="mb-2 md:mb-6 flex min-w-0 items-baseline justify-between gap-2 overflow-hidden">
+          <h3 className="min-w-0 flex-1 truncate text-lg md:text-4xl font-black tracking-tighter font-planb">{streamer.nick}</h3>
+          <span className="text-[10px] md:text-sm text-white/40 font-bold whitespace-nowrap flex-shrink-0">{streamer.category}</span>
+        </div>
+        <div className={`h-[1px] w-8 md:w-12 mb-3 md:mb-8 transition-all duration-1000 ease-in-out ${
+          streamer.isLive ? 'bg-white/30 group-hover:w-full' : 'bg-white/10'
+        }`}></div>
+        <div className="title-container mb-4 md:mb-12 h-5 md:h-8 flex items-center">
+          <p className="title-text text-gray-400 text-[10px] md:text-sm font-medium italic opacity-80">
+            "{streamer.isLive ? streamer.title : 'Offline'}"
+          </p>
+        </div>
+        <a
+          href={streamer.isLive ? `https://play.sooplive.co.kr/${streamer.id}` : `https://www.sooplive.co.kr/station/${streamer.id}`}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center justify-center w-full py-3 md:py-5 border border-white/10 bg-white/5 text-white/80 hover:bg-white hover:text-black font-black tracking-[0.1em] md:tracking-[0.2em] transition-all duration-500 rounded-lg md:rounded-2xl text-[8px] md:text-[10px] uppercase font-planb"
+        >
+          {streamer.isLive ? 'Connect' : 'Station'}
+        </a>
+      </div>
+    </div>
+  );
+
+  if (!streamer.isLive) {
+    return (
+      <div className="group w-full overflow-hidden rounded-[2rem] border border-white/10 bg-[#030303] shadow-2xl">
+        {cardContent}
+      </div>
+    );
+  }
+
+  if (isOvertime) {
+    return (
+      <div className="relative p-2">
+        <ElectricBorder
+          color="#7df9ff"
+          speed={1}
+          chaos={0.12}
+          className="group w-full shadow-2xl"
+          borderRadius={32}
+        >
+          <div className="h-full rounded-[inherit] overflow-hidden bg-[#030303]">
+            {cardContent}
+          </div>
+        </ElectricBorder>
+      </div>
+    );
+  }
+
+  return (
+    <StarBorder
+      color="white"
+      speed="10s"
+      className="group w-full shadow-2xl"
+    >
+      {cardContent}
+    </StarBorder>
+  );
+});
+
 const App = () => {
-  const [liveStreamers, setLiveStreamers] = useState([]);
+  const [streamerStatuses, setStreamerStatuses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showAllStreamers, setShowAllStreamers] = useState(false);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState(() => CATEGORY_OPTIONS.map(category => category.key));
 
@@ -108,11 +202,12 @@ const App = () => {
           new URLSearchParams({ bid: bjid, type: 'live', player_type: 'html5' }), 
           { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
         );
+        const info = streamerConfig[bjid] || {};
         if (res.data?.CHANNEL?.RESULT === 1) {
           const sRes = await axios.get(`/api-ch/api/${bjid}/station`);
-          const info = streamerConfig[bjid] || {};
           return {
             id: bjid,
+            isLive: true,
             categoryKey: streamerCategoryById[bjid] || 'Others',
             nick: info.name || res.data.CHANNEL.BJNICK,
             category: info.category || "",
@@ -122,11 +217,34 @@ const App = () => {
             thumb: `https://liveimg.sooplive.co.kr/m/${res.data.CHANNEL.BNO}?v=${Date.now()}`
           };
         }
+        const stationRes = await axios.get(`/api-ch/api/${bjid}/station`);
+        return {
+          id: bjid,
+          isLive: false,
+          categoryKey: streamerCategoryById[bjid] || 'Others',
+          nick: info.name || stationRes.data?.station?.user_nick || bjid,
+          category: info.category || "",
+          title: "",
+          viewer: "OFFLINE",
+          duration: 0,
+          thumb: normalizeImageUrl(stationRes.data?.profile_image)
+        };
       } catch (e) { console.error(e); }
-      return null;
+      const info = streamerConfig[bjid] || {};
+      return {
+        id: bjid,
+        isLive: false,
+        categoryKey: streamerCategoryById[bjid] || 'Others',
+        nick: info.name || bjid,
+        category: info.category || "",
+        title: "",
+        viewer: "OFFLINE",
+        duration: 0,
+        thumb: ""
+      };
     });
     const results = await Promise.all(checkPromises);
-    setLiveStreamers(results.filter(r => r !== null));
+    setStreamerStatuses(results.filter(r => r !== null));
     setLoading(false);
   };
 
@@ -136,9 +254,24 @@ const App = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const filteredLiveStreamers = useMemo(() => {
-    return liveStreamers.filter(streamer => selectedCategories.includes(streamer.categoryKey));
-  }, [liveStreamers, selectedCategories]);
+  const liveStreamers = useMemo(() => {
+    return streamerStatuses.filter(streamer => streamer.isLive);
+  }, [streamerStatuses]);
+
+  const displayedStreamers = useMemo(() => {
+    return streamerStatuses.filter(streamer => (
+      selectedCategories.includes(streamer.categoryKey) &&
+      (showAllStreamers || streamer.isLive)
+    ));
+  }, [streamerStatuses, selectedCategories, showAllStreamers]);
+
+  const showAllFromOffline = useCallback(() => {
+    setShowAllStreamers(true);
+  }, []);
+
+  const toggleDisplayMode = useCallback(() => {
+    setShowAllStreamers(showAll => !showAll);
+  }, []);
 
   const toggleCategory = useCallback(categoryKey => {
     setSelectedCategories(current => (
@@ -171,7 +304,7 @@ const App = () => {
   return (
     <div className="min-h-screen bg-black text-white font-sans overflow-x-hidden selection:bg-white selection:text-black">
       {categoryFilter}
-      {liveStreamers.length === 0 ? (
+      {liveStreamers.length === 0 && !showAllStreamers ? (
         // [OFFLINE MODE]
         <div className="h-screen flex flex-col items-center justify-center px-6">
           <div className="scale-90 md:scale-100">
@@ -179,9 +312,13 @@ const App = () => {
           </div>
           <div className="mt-20 md:mt-32 flex flex-col items-center gap-6">
             <div className="h-[1px] w-16 md:w-24 bg-white/20"></div>
-            <p className="text-white tracking-[1em] md:tracking-[1.5em] text-lg md:text-2xl font-black animate-pulse uppercase text-center leading-relaxed">
+            <button
+              type="button"
+              onClick={showAllFromOffline}
+              className="text-white tracking-[1em] md:tracking-[1.5em] text-lg md:text-2xl font-black animate-pulse uppercase text-center leading-relaxed transition-opacity hover:opacity-70"
+            >
               Currently<br className="md:hidden" /> Offline
-            </p>
+            </button>
             <div className="h-[1px] w-16 md:w-24 bg-white/20"></div>
           </div>
         </div>
@@ -192,87 +329,35 @@ const App = () => {
             <div className="scale-75 md:scale-75 origin-center md:origin-left">
               <GlitteringLogo sizeClass="text-[4rem] md:text-[6rem]" />
             </div>
-            <div className="flex items-center gap-4 md:gap-6 bg-white/5 border border-white/20 px-6 md:px-10 py-3 md:py-4 rounded-full backdrop-blur-md">
-              <span className="w-2 h-2 md:w-2.5 md:h-2.5 bg-red-600 rounded-full animate-ping"></span>
-              <span className="text-xs md:text-sm font-black tracking-[0.4em] md:tracking-[0.6em] text-white uppercase">Live Now</span>
-            </div>
+            <button
+              type="button"
+              onClick={toggleDisplayMode}
+              aria-pressed={showAllStreamers}
+              className="flex items-center gap-4 md:gap-6 bg-white/5 border border-white/20 px-6 md:px-10 py-3 md:py-4 rounded-full backdrop-blur-md transition-colors duration-300 hover:bg-white hover:text-black"
+            >
+              {!showAllStreamers && (
+                <span className="w-2 h-2 md:w-2.5 md:h-2.5 bg-red-600 rounded-full animate-ping"></span>
+              )}
+              <span className="text-xs md:text-sm font-black tracking-[0.4em] md:tracking-[0.6em] uppercase">
+                {showAllStreamers ? 'All' : 'Live Now'}
+              </span>
+            </button>
           </div>
           
           {/* 모바일에서 grid-cols-2 적용 */}
-          {filteredLiveStreamers.length === 0 ? (
+          {displayedStreamers.length === 0 ? (
             <div className="flex min-h-[40vh] flex-col items-center justify-center gap-6 text-center">
               <div className="h-[1px] w-16 md:w-24 bg-white/20"></div>
               <p className="text-white/70 tracking-[0.4em] md:tracking-[0.8em] text-sm md:text-lg font-black uppercase leading-relaxed">
-                Selected<br className="md:hidden" /> Categories Offline
+                {showAllStreamers ? 'No Selected Categories' : 'Selected'}<br className="md:hidden" /> {showAllStreamers ? 'Visible' : 'Categories Offline'}
               </p>
               <div className="h-[1px] w-16 md:w-24 bg-white/20"></div>
             </div>
           ) : (
           <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-14">
-            {filteredLiveStreamers.map(streamer => {
-              const isOvertime = streamer.duration >= 21600; // 6 hours
-              
-              if (isOvertime) {
-                return (
-                  <div key={streamer.id} className="relative p-2"> {/* 전기가 튈 공간 확보 */}
-                    <ElectricBorder
-                      color="#7df9ff"
-                      speed={1}
-                      chaos={0.12}
-                      className="group w-full shadow-2xl"
-                      borderRadius={32}
-                    >
-                      <div className="h-full rounded-[inherit] overflow-hidden bg-[#030303]">
-                        <div className="aspect-video w-full bg-[#0a0a0a] overflow-hidden relative border-b border-white/5">
-                          <img src={streamer.thumb} alt="live" className="w-full h-full object-cover grayscale group-hover:grayscale-0 group-hover:scale-110 transition-all duration-1000 ease-out" />
-                        </div>
-                        <div className="p-4 md:p-10">
-                          <div className="mb-2 md:mb-6 flex items-baseline justify-between gap-2 overflow-hidden">
-                            <h3 className="text-lg md:text-4xl font-black tracking-tighter font-planb truncate flex-shrink-1">{streamer.nick}</h3>
-                            <span className="text-[10px] md:text-sm text-white/40 font-bold whitespace-nowrap flex-shrink-0">{streamer.category}</span>
-                          </div>
-                          <div className="h-[1px] w-8 md:w-12 bg-white/30 mb-3 md:mb-8 group-hover:w-full transition-all duration-1000 ease-in-out"></div>
-                          <div className="title-container mb-4 md:mb-12 h-5 md:h-8 flex items-center">
-                            <p className="title-text text-gray-400 text-[10px] md:text-sm font-medium italic opacity-80">"{streamer.title}"</p>
-                          </div>
-                          <a href={`https://play.sooplive.co.kr/${streamer.id}`} target="_blank" rel="noreferrer" className="flex items-center justify-center w-full py-3 md:py-5 border border-white/10 bg-white/5 text-white/80 hover:bg-white hover:text-black font-black tracking-[0.1em] md:tracking-[0.2em] transition-all duration-500 rounded-lg md:rounded-2xl text-[8px] md:text-[10px] uppercase font-planb">
-                            Connect
-                          </a>
-                        </div>
-                      </div>
-                    </ElectricBorder>
-                  </div>
-                );
-              }
-
-              return (
-                <StarBorder 
-                  key={streamer.id} 
-                  color="white" 
-                  speed="10s" 
-                  className="group w-full shadow-2xl"
-                >
-                  <div className="bg-[#030303]">
-                    <div className="aspect-video w-full bg-[#0a0a0a] overflow-hidden relative border-b border-white/5">
-                      <img src={streamer.thumb} alt="live" className="w-full h-full object-cover grayscale group-hover:grayscale-0 group-hover:scale-110 transition-all duration-1000 ease-out" />
-                    </div>
-                    <div className="p-4 md:p-10">
-                      <div className="mb-2 md:mb-6 flex items-baseline justify-between gap-2 overflow-hidden">
-                        <h3 className="text-lg md:text-4xl font-black tracking-tighter font-planb truncate flex-shrink-1">{streamer.nick}</h3>
-                        <span className="text-[10px] md:text-sm text-white/40 font-bold whitespace-nowrap flex-shrink-0">{streamer.category}</span>
-                      </div>
-                      <div className="h-[1px] w-8 md:w-12 bg-white/30 mb-3 md:mb-8 group-hover:w-full transition-all duration-1000 ease-in-out"></div>
-                      <div className="title-container mb-4 md:mb-12 h-5 md:h-8 flex items-center">
-                        <p className="title-text text-gray-400 text-[10px] md:text-sm font-medium italic opacity-80">"{streamer.title}"</p>
-                      </div>
-                      <a href={`https://play.sooplive.co.kr/${streamer.id}`} target="_blank" rel="noreferrer" className="flex items-center justify-center w-full py-3 md:py-5 border border-white/10 bg-white/5 text-white/80 hover:bg-white hover:text-black font-black tracking-[0.1em] md:tracking-[0.2em] transition-all duration-500 rounded-lg md:rounded-2xl text-[8px] md:text-[10px] uppercase font-planb">
-                        Connect
-                      </a>
-                    </div>
-                  </div>
-                </StarBorder>
-              );
-            })}
+            {displayedStreamers.map(streamer => (
+              <StreamerCard key={streamer.id} streamer={streamer} />
+            ))}
           </div>
           )}
         </div>
