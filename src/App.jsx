@@ -128,10 +128,17 @@ const summarizeText = (post) => {
   ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 };
 
-const formatPostPreview = (post) => ({
+const getPostUrl = (bjid, titleNo) => (
+  titleNo
+    ? `https://www.sooplive.co.kr/station/${bjid}/post/${titleNo}`
+    : `https://www.sooplive.co.kr/station/${bjid}`
+);
+
+const formatPostPreview = (post, bjid) => ({
   id: post.titleNo,
   title: post.titleName || '제목 없음',
-  content: summarizeText(post) || '내용 없음'
+  content: summarizeText(post) || '내용 없음',
+  url: getPostUrl(bjid, post.titleNo)
 });
 
 const fetchLatestVod = async (bjid) => {
@@ -147,48 +154,64 @@ const fetchLatestVod = async (bjid) => {
   };
 };
 
-const OfflinePostOverlay = React.memo(({ postsState }) => {
+const OfflinePostOverlay = React.memo(({ postsState, isVisible }) => {
   const posts = postsState?.items || [];
   const failed = postsState?.status === 'error';
   const loading = !postsState || postsState.status === 'loading';
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-20 flex flex-col justify-end bg-black/88 p-3 md:p-5 opacity-0 transition-all duration-500 ease-out group-hover:opacity-100 group-focus-within:opacity-100">
-      <div className="translate-y-3 transition-transform duration-500 ease-out group-hover:translate-y-0 group-focus-within:translate-y-0">
-        <div className="mb-2 text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] text-white/45">
+    <div className={`offline-post-overlay absolute inset-0 z-20 flex flex-col overflow-hidden bg-black px-3 py-4 transition-opacity duration-500 ease-out md:px-5 md:py-5 ${
+      isVisible ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
+    }`}>
+      <div className="text-center">
+        <div className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] text-white/45">
           Recent Posts
         </div>
-        {loading ? (
-          <p className="text-[10px] md:text-xs font-bold text-white/55">게시글 불러오는 중</p>
-        ) : failed ? (
-          <p className="text-[10px] md:text-xs font-bold text-white/70">게시글 가져오기 실패</p>
-        ) : posts.length === 0 ? (
-          <p className="text-[10px] md:text-xs font-bold text-white/55">최근 게시글 없음</p>
-        ) : (
-          <div className="grid gap-2">
-            {posts.map(post => (
-              <div key={post.id} className="min-w-0 border-t border-white/10 pt-2 first:border-t-0 first:pt-0">
-                <p className="truncate text-[10px] md:text-xs font-black text-white">{post.title}</p>
-                <p
-                  className="mt-0.5 overflow-hidden text-[9px] md:text-[11px] leading-snug text-white/55"
-                  style={{
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical'
-                  }}
-                >
-                  {post.content}
-                </p>
-              </div>
-            ))}
-          </div>
+        {loading && (
+          <p className="mt-3 text-[10px] md:text-xs font-bold text-white/70">게시글 불러오는중...</p>
+        )}
+        {failed && (
+          <p className="mt-3 text-[10px] md:text-xs font-bold text-white/70">게시글 가져오기 실패</p>
+        )}
+        {!loading && !failed && posts.length === 0 && (
+          <p className="mt-3 text-[10px] md:text-xs font-bold text-white/55">최근 게시글 없음</p>
         )}
       </div>
+      {!loading && !failed && posts.length > 0 && (
+        <div className="mt-3 grid min-h-0 gap-1.5 overflow-hidden md:mt-4">
+          {posts.map((post, index) => (
+            <a
+              key={post.id}
+              href={post.url}
+              target="_blank"
+              rel="noreferrer"
+              className="block min-w-0 rounded-lg border border-white/10 bg-white/[0.03] p-2 opacity-0 transition-colors duration-300 hover:border-white/40 hover:bg-white/10 focus:outline-none focus:ring-1 focus:ring-white/60"
+              style={{
+                animation: 'postOverlayItem 520ms ease-out forwards',
+                animationDelay: `${80 + index * 90}ms`
+              }}
+            >
+              <p className="truncate text-[9px] md:text-[11px] font-black leading-tight text-white">{post.title}</p>
+              <p
+                className="mt-0.5 overflow-hidden text-[8px] md:text-[10px] leading-tight text-white/55"
+                style={{
+                  display: '-webkit-box',
+                  WebkitLineClamp: 1,
+                  WebkitBoxOrient: 'vertical'
+                }}
+              >
+                {post.content}
+              </p>
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 });
 
 const StreamerCard = React.memo(({ streamer, postsState, onLoadPosts }) => {
+  const [postsVisible, setPostsVisible] = useState(false);
   const isOvertime = streamer.isLive && streamer.duration >= 21600; // 6 hours
   const cardImage = streamer.isLive ? streamer.thumb : streamer.replay?.thumb || streamer.thumb;
   const cardTitle = streamer.isLive ? streamer.title : streamer.replay?.title || 'Recent replay unavailable';
@@ -196,51 +219,70 @@ const StreamerCard = React.memo(({ streamer, postsState, onLoadPosts }) => {
     ? `https://play.sooplive.co.kr/${streamer.id}`
     : streamer.replay?.url || `https://www.sooplive.co.kr/station/${streamer.id}`;
   const buttonLabel = 'Connect';
-  const requestPosts = () => {
-    if (!streamer.isLive) onLoadPosts(streamer);
+  const showPosts = () => {
+    if (!streamer.isLive) {
+      setPostsVisible(true);
+      onLoadPosts(streamer);
+    }
+  };
+  const hidePosts = () => {
+    if (!streamer.isLive) setPostsVisible(false);
+  };
+  const blurPosts = event => {
+    if (!event.currentTarget.contains(event.relatedTarget)) hidePosts();
   };
 
   const cardContent = (
-    <div
-      className="relative bg-[#030303]"
-      onMouseEnter={requestPosts}
-      onFocus={requestPosts}
-    >
-      <div className="aspect-video w-full bg-[#0a0a0a] overflow-hidden relative border-b border-white/5">
-        {cardImage ? (
-          <img
-            src={cardImage}
-            alt={streamer.isLive ? 'live' : 'offline'}
-            className={`w-full h-full transition-all duration-1000 ease-out ${
-              streamer.isLive
-                ? 'object-cover grayscale group-hover:grayscale-0 group-hover:scale-110'
-                : 'object-cover opacity-70 grayscale group-hover:scale-105'
-            }`}
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-white/20 font-planb text-xl md:text-3xl">
-            PLAN.B
+    <div className="relative bg-[#030303]">
+      <div
+        className="relative focus:outline-none"
+        tabIndex={!streamer.isLive ? 0 : undefined}
+        onMouseEnter={showPosts}
+        onMouseLeave={hidePosts}
+        onPointerEnter={showPosts}
+        onClick={showPosts}
+        onFocusCapture={showPosts}
+        onBlur={blurPosts}
+      >
+        <div className="aspect-video w-full bg-[#0a0a0a] overflow-hidden relative border-b border-white/5">
+          {cardImage ? (
+            <img
+              src={cardImage}
+              alt={streamer.isLive ? 'live' : 'offline'}
+              className={`w-full h-full transition-all duration-1000 ease-out ${
+                streamer.isLive
+                  ? 'object-cover grayscale group-hover:grayscale-0 group-hover:scale-110'
+                  : 'object-cover opacity-70 grayscale group-hover:scale-105'
+              }`}
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-white/20 font-planb text-xl md:text-3xl">
+              PLAN.B
+            </div>
+          )}
+          {!streamer.isLive && (
+            <span className="absolute right-3 top-3 rounded-full border border-white/10 bg-black/70 px-2.5 py-1 text-[9px] md:text-[10px] font-black tracking-[0.25em] text-white/50">
+              OFFLINE
+            </span>
+          )}
+        </div>
+        <div className="px-4 pb-3 pt-4 md:px-10 md:pb-6 md:pt-10">
+          <div className="mb-2 md:mb-6 flex min-w-0 items-baseline justify-between gap-2 overflow-hidden">
+            <h3 className="min-w-0 flex-1 truncate text-lg md:text-4xl font-black tracking-tighter font-planb">{streamer.nick}</h3>
+            <span className="text-[10px] md:text-sm text-white/40 font-bold whitespace-nowrap flex-shrink-0">{streamer.category}</span>
           </div>
-        )}
-        {!streamer.isLive && (
-          <span className="absolute right-3 top-3 rounded-full border border-white/10 bg-black/70 px-2.5 py-1 text-[9px] md:text-[10px] font-black tracking-[0.25em] text-white/50">
-            OFFLINE
-          </span>
-        )}
+          <div className={`h-[1px] w-8 md:w-12 mb-3 md:mb-8 transition-all duration-1000 ease-in-out ${
+            streamer.isLive ? 'bg-white/30 group-hover:w-full' : 'bg-white/10'
+          }`}></div>
+          <div className="title-container h-5 md:h-8 flex items-center">
+            <p className="title-text text-gray-400 text-[10px] md:text-sm font-medium italic opacity-80">
+              "{cardTitle}"
+            </p>
+          </div>
+        </div>
+        {!streamer.isLive && <OfflinePostOverlay postsState={postsState} isVisible={postsVisible} />}
       </div>
-      <div className="p-4 md:p-10">
-        <div className="mb-2 md:mb-6 flex min-w-0 items-baseline justify-between gap-2 overflow-hidden">
-          <h3 className="min-w-0 flex-1 truncate text-lg md:text-4xl font-black tracking-tighter font-planb">{streamer.nick}</h3>
-          <span className="text-[10px] md:text-sm text-white/40 font-bold whitespace-nowrap flex-shrink-0">{streamer.category}</span>
-        </div>
-        <div className={`h-[1px] w-8 md:w-12 mb-3 md:mb-8 transition-all duration-1000 ease-in-out ${
-          streamer.isLive ? 'bg-white/30 group-hover:w-full' : 'bg-white/10'
-        }`}></div>
-        <div className="title-container mb-4 md:mb-12 h-5 md:h-8 flex items-center">
-          <p className="title-text text-gray-400 text-[10px] md:text-sm font-medium italic opacity-80">
-            "{cardTitle}"
-          </p>
-        </div>
+      <div className="relative z-30 px-4 pb-4 pt-1 md:px-10 md:pb-10 md:pt-4">
         <a
           href={cardHref}
           target="_blank"
@@ -250,7 +292,6 @@ const StreamerCard = React.memo(({ streamer, postsState, onLoadPosts }) => {
           {buttonLabel}
         </a>
       </div>
-      {!streamer.isLive && <OfflinePostOverlay postsState={postsState} />}
     </div>
   );
 
@@ -398,36 +439,40 @@ const App = () => {
       const menus = (streamer.stationMenus || [])
         .filter(menu => Number(menu.display_type) === 104 && menu.bbs_no);
       const collected = [];
-      let requestCount = 0;
-      let failureCount = 0;
       const seenPostIds = new Set();
 
-      for (const menu of menus) {
+      const boardResults = await Promise.all(menus.map(async menu => {
         try {
-          requestCount += 1;
           const boardRes = await axios.get(`/api-channel/v1.1/channel/${streamer.id}/board`, {
             params: {
               bbsNo: menu.bbs_no,
               page: 1,
               perPage: 20
-            }
+            },
+            timeout: 6000
           });
-          const posts = boardRes.data?.contents || boardRes.data?.data || [];
-          posts.forEach(post => {
-            if (post.userId !== streamer.id || seenPostIds.has(post.titleNo)) return;
-            seenPostIds.add(post.titleNo);
-            collected.push({
-              ...formatPostPreview(post),
-              regDate: post.regDate || ''
-            });
-          });
+          return { failed: false, posts: boardRes.data?.contents || boardRes.data?.data || [] };
         } catch (e) {
-          failureCount += 1;
           console.error(e);
+          return { failed: true, posts: [] };
         }
-      }
+      }));
 
-      if (collected.length === 0 && requestCount > 0 && failureCount === requestCount) {
+      boardResults.forEach(result => {
+        result.posts.forEach(post => {
+          if (post.userId !== streamer.id || seenPostIds.has(post.titleNo)) return;
+          seenPostIds.add(post.titleNo);
+          collected.push({
+            ...formatPostPreview(post, streamer.id),
+            regDate: post.regDate || ''
+          });
+        });
+      });
+
+      const requestCount = boardResults.length;
+      const failureCount = boardResults.filter(result => result.failed).length;
+
+      if (requestCount > 0 && failureCount === requestCount) {
         throw new Error('Failed to fetch posts');
       }
 
