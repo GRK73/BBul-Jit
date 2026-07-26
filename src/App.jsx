@@ -22,6 +22,25 @@ const streamerCategoryById = Object.entries(streamers).reduce((acc, [category, i
 }, {});
 
 const ALL_STREAMER_IDS = Object.values(streamers).flat();
+const ASPIRANTS = [
+  { id: 'kkyren', name: '키렌' },
+  { id: 'dbzlll', name: '유이☆' },
+  { id: 'miuismeow', name: '미유?' },
+  { id: 'oohwooya82', name: '우야' },
+  { id: 'mika35', name: '미카는미카' },
+  { id: 'xxxsihyeon', name: '텐타시현' },
+  { id: 'pyo32o', name: '표표표3' },
+  { id: 'amanemay', name: '김메이' },
+  { id: 'dokg531', name: '독쥐DOKG' }
+];
+const ASPIRANT_IDS = ASPIRANTS.map(aspirant => aspirant.id);
+const STATUS_STREAMER_IDS = [...ALL_STREAMER_IDS, ...ASPIRANT_IDS];
+const mainStreamerIdSet = new Set(ALL_STREAMER_IDS);
+const aspirantIdSet = new Set(ASPIRANT_IDS);
+const aspirantById = ASPIRANTS.reduce((acc, aspirant, index) => {
+  acc[aspirant.id] = { ...aspirant, order: index };
+  return acc;
+}, {});
 const streamerOrderById = ALL_STREAMER_IDS.reduce((acc, id, index) => {
   acc[id] = index;
   return acc;
@@ -97,6 +116,34 @@ const CategoryFilter = React.memo(({ isOpen, selectedCategories, onToggleMenu, o
         })}
       </div>
     </div>
+  </div>
+));
+
+const AspirantToggle = React.memo(({ active, onToggle }) => (
+  <div className="fixed right-4 top-4 z-50 md:right-6 md:top-6">
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={active}
+      aria-label={active ? '플랜비 멤버 보기' : '플랜비 지망생 구경하기'}
+      className={`relative flex h-11 w-40 items-center justify-center overflow-hidden rounded-full border px-4 text-[10px] font-black tracking-[0.08em] shadow-2xl backdrop-blur-md transition-all duration-300 md:h-12 md:w-48 md:text-xs ${
+        active
+          ? 'border-white bg-white text-black'
+          : 'border-white/20 bg-black/70 text-white hover:border-white/50 hover:bg-white/10'
+      }`}
+    >
+      <span className={`absolute flex items-center gap-2 transition-all duration-500 ${
+        active ? '-translate-y-2 opacity-0' : 'translate-y-0 opacity-100'
+      }`}>
+        <span className="text-white/45">PLAN.B</span>
+        <span>지망생 구경하기</span>
+      </span>
+      <span className={`absolute transition-all duration-500 ${
+        active ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
+      }`}>
+        멤버 보기
+      </span>
+    </button>
   </div>
 ));
 
@@ -337,16 +384,18 @@ const App = () => {
   const [offlinePostsById, setOfflinePostsById] = useState({});
   const [loading, setLoading] = useState(true);
   const [showAllStreamers, setShowAllStreamers] = useState(false);
+  const [showAspirants, setShowAspirants] = useState(false);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState(() => CATEGORY_OPTIONS.map(category => category.key));
 
   const checkAllStatus = async () => {
-    const checkPromises = ALL_STREAMER_IDS.map(async (bjid) => {
+    const checkPromises = STATUS_STREAMER_IDS.map(async (bjid) => {
       try {
         const res = await axios.post(`/api-soop/afreeca/player_live_api.php?bjid=${bjid}`, 
           new URLSearchParams({ bid: bjid, type: 'live', player_type: 'html5' }), 
           { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
         );
+        const aspirant = aspirantById[bjid];
         const info = streamerConfig[bjid] || {};
         if (res.data?.CHANNEL?.RESULT === 1) {
           const sRes = await axios.get(`/api-ch/api/${bjid}/station`);
@@ -354,8 +403,8 @@ const App = () => {
             id: bjid,
             isLive: true,
             categoryKey: streamerCategoryById[bjid] || 'Others',
-            nick: info.name || res.data.CHANNEL.BJNICK,
-            category: info.category || "",
+            nick: aspirant?.name || info.name || res.data.CHANNEL.BJNICK,
+            category: aspirant ? '플랜비 지망생' : info.category || "",
             title: res.data.CHANNEL.TITLE,
             viewer: sRes.data?.broad?.visitor_cnt || "LIVE",
             duration: res.data.CHANNEL.BTIME || 0,
@@ -373,8 +422,8 @@ const App = () => {
           id: bjid,
           isLive: false,
           categoryKey: streamerCategoryById[bjid] || 'Others',
-          nick: info.name || stationRes.data?.station?.user_nick || bjid,
-          category: info.category || "",
+          nick: aspirant?.name || info.name || stationRes.data?.station?.user_nick || bjid,
+          category: aspirant ? '플랜비 지망생' : info.category || "",
           title: "",
           viewer: "OFFLINE",
           duration: 0,
@@ -383,13 +432,14 @@ const App = () => {
           stationMenus: stationRes.data?.station?.menus || []
         };
       } catch (e) { console.error(e); }
+      const aspirant = aspirantById[bjid];
       const info = streamerConfig[bjid] || {};
       return {
         id: bjid,
         isLive: false,
         categoryKey: streamerCategoryById[bjid] || 'Others',
-        nick: info.name || bjid,
-        category: info.category || "",
+        nick: aspirant?.name || info.name || bjid,
+        category: aspirant ? '플랜비 지망생' : info.category || "",
         title: "",
         viewer: "OFFLINE",
         duration: 0,
@@ -410,12 +460,24 @@ const App = () => {
   }, []);
 
   const liveStreamers = useMemo(() => {
-    return streamerStatuses.filter(streamer => streamer.isLive);
+    return streamerStatuses.filter(streamer => (
+      mainStreamerIdSet.has(streamer.id) && streamer.isLive
+    ));
   }, [streamerStatuses]);
 
   const displayedStreamers = useMemo(() => {
+    if (showAspirants) {
+      return streamerStatuses
+        .filter(streamer => aspirantIdSet.has(streamer.id))
+        .sort((a, b) => {
+          if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
+          return (aspirantById[a.id]?.order ?? 0) - (aspirantById[b.id]?.order ?? 0);
+        });
+    }
+
     return streamerStatuses
       .filter(streamer => (
+        mainStreamerIdSet.has(streamer.id) &&
         selectedCategories.includes(streamer.categoryKey) &&
         (showAllStreamers || streamer.isLive)
       ))
@@ -423,7 +485,7 @@ const App = () => {
         if (showAllStreamers && a.isLive !== b.isLive) return a.isLive ? -1 : 1;
         return (streamerOrderById[a.id] ?? 0) - (streamerOrderById[b.id] ?? 0);
       });
-  }, [streamerStatuses, selectedCategories, showAllStreamers]);
+  }, [streamerStatuses, selectedCategories, showAllStreamers, showAspirants]);
 
   const loadOfflinePosts = useCallback(async (streamer) => {
     if (!streamer || streamer.isLive) return;
@@ -502,6 +564,10 @@ const App = () => {
     setShowAllStreamers(showAll => !showAll);
   }, []);
 
+  const toggleAspirantMode = useCallback(() => {
+    setShowAspirants(current => !current);
+  }, []);
+
   const toggleCategory = useCallback(categoryKey => {
     setSelectedCategories(current => (
       current.includes(categoryKey)
@@ -522,18 +588,26 @@ const App = () => {
       onToggleCategory={toggleCategory}
     />
   );
+  const aspirantToggle = (
+    <AspirantToggle
+      active={showAspirants}
+      onToggle={toggleAspirantMode}
+    />
+  );
 
   if (loading) return (
     <div className="min-h-screen bg-black flex items-center justify-center text-white font-planb">
       {categoryFilter}
+      {aspirantToggle}
       <div className="text-2xl md:text-4xl animate-pulse tracking-widest text-white">PLAN.B</div>
     </div>
   );
 
   return (
     <div className="min-h-screen bg-black text-white font-sans overflow-x-hidden selection:bg-white selection:text-black">
-      {categoryFilter}
-      {liveStreamers.length === 0 && !showAllStreamers ? (
+      {!showAspirants && categoryFilter}
+      {aspirantToggle}
+      {liveStreamers.length === 0 && !showAllStreamers && !showAspirants ? (
         // [OFFLINE MODE]
         <div className="h-screen flex flex-col items-center justify-center px-6">
           <div className="scale-90 md:scale-100">
@@ -553,30 +627,36 @@ const App = () => {
         </div>
       ) : (
         // [LIVE MODE]
-        <div className="max-w-7xl mx-auto p-4 md:p-16">
+        <div className="mx-auto max-w-7xl px-4 pb-4 pt-24 md:px-16 md:pb-16 md:pt-28">
           <div className="flex flex-col md:flex-row justify-between items-center mb-12 md:mb-24 gap-8 md:gap-12 pb-8 md:pb-16 border-b border-white/5 text-center md:text-left">
             <div className="scale-75 md:scale-75 origin-center md:origin-left">
               <GlitteringLogo sizeClass="text-[4rem] md:text-[6rem]" />
             </div>
-            <button
-              type="button"
-              onClick={toggleDisplayMode}
-              aria-pressed={showAllStreamers}
-              aria-label={showAllStreamers ? 'Show live streamers' : 'Show all streamers'}
-              className="relative flex h-[52px] w-44 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/5 px-6 backdrop-blur-md transition-colors duration-300 hover:bg-white hover:text-black md:h-[58px] md:w-60"
-            >
-              <span className={`absolute inline-flex items-center justify-center gap-3 text-xs md:text-sm font-black tracking-[0.4em] md:tracking-[0.6em] uppercase transition-all duration-500 ${
-                showAllStreamers ? '-translate-y-2 opacity-0' : 'translate-y-0 opacity-100'
-              }`}>
-                <span className="h-2 w-2 rounded-full bg-red-600 animate-ping md:h-2.5 md:w-2.5" aria-hidden="true"></span>
-                <span>Live Now</span>
-              </span>
-              <span className={`absolute text-xs md:text-sm font-black tracking-[0.6em] md:tracking-[0.8em] uppercase transition-all duration-500 ${
-                showAllStreamers ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
-              }`}>
-                All
-              </span>
-            </button>
+            {showAspirants ? (
+              <div className="flex h-[52px] w-44 items-center justify-center rounded-full border border-white/20 bg-white/5 px-6 text-[10px] font-black uppercase tracking-[0.22em] text-white/70 backdrop-blur-md md:h-[58px] md:w-60 md:text-xs md:tracking-[0.4em]">
+                Plan.B Aspirants
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={toggleDisplayMode}
+                aria-pressed={showAllStreamers}
+                aria-label={showAllStreamers ? 'Show live streamers' : 'Show all streamers'}
+                className="relative flex h-[52px] w-44 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/5 px-6 backdrop-blur-md transition-colors duration-300 hover:bg-white hover:text-black md:h-[58px] md:w-60"
+              >
+                <span className={`absolute inline-flex items-center justify-center gap-3 text-xs md:text-sm font-black tracking-[0.4em] md:tracking-[0.6em] uppercase transition-all duration-500 ${
+                  showAllStreamers ? '-translate-y-2 opacity-0' : 'translate-y-0 opacity-100'
+                }`}>
+                  <span className="h-2 w-2 rounded-full bg-red-600 animate-ping md:h-2.5 md:w-2.5" aria-hidden="true"></span>
+                  <span>Live Now</span>
+                </span>
+                <span className={`absolute text-xs md:text-sm font-black tracking-[0.6em] md:tracking-[0.8em] uppercase transition-all duration-500 ${
+                  showAllStreamers ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
+                }`}>
+                  All
+                </span>
+              </button>
+            )}
           </div>
           
           {/* 모바일에서 grid-cols-2 적용 */}
@@ -584,7 +664,11 @@ const App = () => {
             <div className="flex min-h-[40vh] flex-col items-center justify-center gap-6 text-center">
               <div className="h-[1px] w-16 md:w-24 bg-white/20"></div>
               <p className="text-white/70 tracking-[0.4em] md:tracking-[0.8em] text-sm md:text-lg font-black uppercase leading-relaxed">
-                {showAllStreamers ? 'No Selected Categories' : 'Selected'}<br className="md:hidden" /> {showAllStreamers ? 'Visible' : 'Categories Offline'}
+                {showAspirants
+                  ? 'No Aspirants Available'
+                  : showAllStreamers
+                    ? 'No Selected Categories'
+                    : 'Selected'}<br className="md:hidden" /> {!showAspirants && (showAllStreamers ? 'Visible' : 'Categories Offline')}
               </p>
               <div className="h-[1px] w-16 md:w-24 bg-white/20"></div>
             </div>
