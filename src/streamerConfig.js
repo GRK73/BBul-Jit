@@ -27,6 +27,5 @@ export const streamerConfig = {
   "ch1ch1r0": { name: "찌로", category: "BIP" },
   "hobal115end": { name: "호발", category: "BIP" },
   "kangturtle": { name: "한세현", category: "BIP" },
-  "daniyan1030": { name: "다니얀", category: "BIP" },
-  "bamsaena": { name: "밤새나", category: "BIP" }
+  "daniyan1030": { name: "다니얀", category: "BIP" }
 };
