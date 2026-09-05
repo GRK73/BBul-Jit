@@ -1,16 +1,16 @@
 {
-  "rewrites": [
+  "regions": ["icn1"],
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 10
+    }
+  },
+  "headers": [
     {
-      "source": "/api-soop/:path*",
-      "destination": "https://live.sooplive.co.kr/:path*"
-    },
-    {
-      "source": "/api-ch/:path*",
-      "destination": "https://chapi.sooplive.co.kr/:path*"
-    },
-    {
-      "source": "/api-channel/:path*",
-      "destination": "https://api-channel.sooplive.co.kr/:path*"
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
     }
   ]
 }

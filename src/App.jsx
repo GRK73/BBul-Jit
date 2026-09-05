@@ -142,18 +142,6 @@ const formatPostPreview = (post, bjid) => ({
   url: getPostUrl(bjid, post.titleNo)
 });
 
-const fetchLatestVod = async (bjid) => {
-  const vodRes = await axios.get(`/api-ch/api/${bjid}/vods?page=1`);
-  const latestVod = vodRes.data?.data?.[0];
-  if (!latestVod?.title_no) return null;
-
-  return {
-    titleNo: latestVod.title_no,
-    title: latestVod.title_name || 'Recent VOD',
-    thumb: normalizeImageUrl(latestVod.ucc?.thumb),
-    url: `https://vod.sooplive.co.kr/player/${latestVod.title_no}`
-  };
-};
 
 const OfflinePostOverlay = React.memo(({ postsState, isVisible }) => {
   const posts = postsState?.items || [];
@@ -341,74 +329,74 @@ const App = () => {
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState(() => CATEGORY_OPTIONS.map(category => category.key));
 
-  const checkAllStatus = async () => {
-    const checkPromises = ALL_STREAMER_IDS.map(async (bjid) => {
-      try {
-        const res = await axios.post(`/api-soop/afreeca/player_live_api.php?bjid=${bjid}`, 
-          new URLSearchParams({ bid: bjid, type: 'live', player_type: 'html5' }), 
-          { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-        );
-        const info = streamerConfig[bjid] || {};
-        if (res.data?.CHANNEL?.RESULT === 1) {
-          const sRes = await axios.get(`/api-ch/api/${bjid}/station`);
-          return {
-            id: bjid,
-            isLive: true,
-            categoryKey: streamerCategoryById[bjid] || 'Others',
-            nick: info.name || res.data.CHANNEL.BJNICK,
-            category: info.category || "",
-            title: res.data.CHANNEL.TITLE,
-            viewer: sRes.data?.broad?.visitor_cnt || "LIVE",
-            duration: res.data.CHANNEL.BTIME || 0,
-            thumb: `https://liveimg.sooplive.co.kr/m/${res.data.CHANNEL.BNO}?v=${Date.now()}`
-          };
-        }
-        const stationRes = await axios.get(`/api-ch/api/${bjid}/station`);
-        let replay = null;
-        try {
-          replay = await fetchLatestVod(bjid);
-        } catch (e) {
-          console.error(e);
-        }
-        return {
-          id: bjid,
-          isLive: false,
-          categoryKey: streamerCategoryById[bjid] || 'Others',
-          nick: info.name || stationRes.data?.station?.user_nick || bjid,
-          category: info.category || "",
-          title: "",
-          viewer: "OFFLINE",
-          duration: 0,
-          thumb: normalizeImageUrl(stationRes.data?.profile_image),
-          replay,
-          stationMenus: stationRes.data?.station?.menus || []
-        };
-      } catch (e) { console.error(e); }
-      const info = streamerConfig[bjid] || {};
+  // 자주 바뀌는 값(/api/status)과 잘 안 바뀌는 값(/api/profiles)을 분리해서 받는다.
+  // status는 1분, profiles는 10분 주기. 둘 다 요청 1회씩이라 스트리머가 늘어도 부담이 없다.
+  const profilesRef = React.useRef({});
+
+  const merge = useCallback((list, profiles) => {
+    const cacheBust = Date.now();
+    return list.map(s => {
+      const info = streamerConfig[s.id] || {};
+      const prof = profiles[s.id] || {};
       return {
-        id: bjid,
-        isLive: false,
-        categoryKey: streamerCategoryById[bjid] || 'Others',
-        nick: info.name || bjid,
+        ...s,
+        nick: info.name || s.nick || prof.nick || s.id,
         category: info.category || "",
-        title: "",
-        viewer: "OFFLINE",
-        duration: 0,
-        thumb: "",
-        replay: null,
-        stationMenus: []
+        replay: prof.replay || null,
+        // 라이브 썸네일만 매번 새로 받는다(응답 캐시는 살려야 하므로 여기서 붙인다).
+        thumb: s.isLive && s.thumb ? `${s.thumb}?v=${cacheBust}` : prof.thumb || ''
       };
     });
-    const results = await Promise.all(checkPromises);
-    setStreamerStatuses(results.filter(r => r !== null));
-    setLoading(false);
-  };
+  }, []);
+
+  const loadProfiles = useCallback(async () => {
+    try {
+      const res = await axios.get('/api/profiles', { timeout: 20000 });
+      profilesRef.current = res.data?.profiles || {};
+      setStreamerStatuses(current =>
+        current.length ? merge(current, profilesRef.current) : current
+      );
+    } catch (e) {
+      console.error(e);
+    }
+  }, [merge]);
+
+  const checkAllStatus = useCallback(async () => {
+    try {
+      const res = await axios.get('/api/status', { timeout: 15000 });
+      const list = res.data?.streamers || [];
+      if (list.length) setStreamerStatuses(merge(list, profilesRef.current));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, [merge]);
 
   useEffect(() => {
+    loadProfiles();
     checkAllStatus();
-    const timer = setInterval(checkAllStatus, 60000);
-    return () => clearInterval(timer);
-  }, []);
+
+    // 백그라운드 탭에서는 폴링하지 않는다. 열어두고 잊은 탭이 요청을 계속 쓰는 걸 막는다.
+    const statusTimer = setInterval(() => {
+      if (!document.hidden) checkAllStatus();
+    }, 60000);
+    const profileTimer = setInterval(() => {
+      if (!document.hidden) loadProfiles();
+    }, 600000);
+
+    // 탭으로 돌아오면 즉시 갱신해서 오래된 화면을 보여주지 않는다.
+    const onVisibility = () => {
+      if (!document.hidden) checkAllStatus();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      clearInterval(statusTimer);
+      clearInterval(profileTimer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [checkAllStatus, loadProfiles]);
 
   const liveStreamers = useMemo(() => {
     return streamerStatuses.filter(streamer => streamer.isLive);
@@ -426,64 +414,41 @@ const App = () => {
       });
   }, [streamerStatuses, selectedCategories, showAllStreamers]);
 
+  // 게시판 조회도 서버로 옮긴다. 메뉴 수만큼 나가던 요청이 1회가 되고,
+  // 응답은 엣지에서 5분간 캐시되므로 같은 스트리머를 여러 명이 열어도 원본은 한 번만 간다.
   const loadOfflinePosts = useCallback(async (streamer) => {
     if (!streamer || streamer.isLive) return;
-    const currentState = offlinePostsById[streamer.id]?.status;
-    if (currentState === 'loading' || currentState === 'loaded') return;
 
-    setOfflinePostsById(current => ({
-      ...current,
-      [streamer.id]: { status: 'loading', items: [] }
-    }));
+    let alreadyHandled = false;
+    setOfflinePostsById(current => {
+      const status = current[streamer.id]?.status;
+      if (status === 'loading' || status === 'loaded') {
+        alreadyHandled = true;
+        return current;
+      }
+      return { ...current, [streamer.id]: { status: 'loading', items: [] } };
+    });
+    if (alreadyHandled) return;
 
     try {
-      const menus = (streamer.stationMenus || [])
-        .filter(menu => Number(menu.display_type) === 104 && menu.bbs_no);
-      const collected = [];
-      const seenPostIds = new Set();
-
-      const boardResults = await Promise.all(menus.map(async menu => {
-        try {
-          const boardRes = await axios.get(`/api-channel/v1.1/channel/${streamer.id}/board`, {
-            params: {
-              bbsNo: menu.bbs_no,
-              page: 1,
-              perPage: 20
-            },
-            timeout: 6000
-          });
-          return { failed: false, posts: boardRes.data?.contents || boardRes.data?.data || [] };
-        } catch (e) {
-          console.error(e);
-          return { failed: true, posts: [] };
-        }
-      }));
-
-      boardResults.forEach(result => {
-        result.posts.forEach(post => {
-          if (post.userId !== streamer.id || seenPostIds.has(post.titleNo)) return;
-          seenPostIds.add(post.titleNo);
-          collected.push({
-            ...formatPostPreview(post, streamer.id),
-            regDate: post.regDate || ''
-          });
-        });
+      const res = await axios.get('/api/posts', {
+        params: { id: streamer.id },
+        timeout: 10000
       });
 
-      const requestCount = boardResults.length;
-      const failureCount = boardResults.filter(result => result.failed).length;
-
-      if (requestCount > 0 && failureCount === requestCount) {
-        throw new Error('Failed to fetch posts');
-      }
+      if (res.data?.failed) throw new Error('Failed to fetch posts');
 
       setOfflinePostsById(current => ({
         ...current,
         [streamer.id]: {
           status: 'loaded',
-          items: collected
-            .sort((a, b) => new Date(b.regDate) - new Date(a.regDate))
-            .slice(0, 5)
+          items: (res.data?.posts || []).slice(0, 5).map(post => ({
+            id: post.titleNo,
+            title: post.title,
+            content: post.title,
+            url: post.url,
+            regDate: post.regDate
+          }))
         }
       }));
     } catch (e) {
@@ -493,7 +458,7 @@ const App = () => {
         [streamer.id]: { status: 'error', items: [] }
       }));
     }
-  }, [offlinePostsById]);
+  }, []);
 
   const showAllFromOffline = useCallback(() => {
     setShowAllStreamers(true);
