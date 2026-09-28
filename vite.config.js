@@ -1,38 +1,31 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-export default defineConfig({
-  plugins: [react()],
-  base: './',
-  server: {
-    proxy: {
-      '/api-soop': {
-        target: 'https://live.sooplive.co.kr',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api-soop/, ''),
-        headers: {
-          'Origin': 'https://www.sooplive.co.kr',
-          'Referer': 'https://www.sooplive.co.kr/'
+// 로컬 개발에서도 /api/*.js(Vercel 함수)를 그대로 실행한다. 배포에는 영향 없음.
+const localApi = () => ({
+  name: 'local-vercel-api',
+  configureServer(server) {
+    server.middlewares.use(async (req, res, next) => {
+      const url = new URL(req.url, 'http://localhost')
+      const match = url.pathname.match(/^\/api\/([a-z]+)$/)
+      if (!match) return next()
+      try {
+        const { default: handler } = await server.ssrLoadModule(`/api/${match[1]}.js`)
+        req.query = Object.fromEntries(url.searchParams)
+        res.status = code => { res.statusCode = code; return res }
+        res.json = body => {
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify(body))
         }
-      },
-      '/api-channel': {
-        target: 'https://api-channel.sooplive.co.kr',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api-channel/, ''),
-        headers: {
-          'Origin': 'https://www.sooplive.co.kr',
-          'Referer': 'https://www.sooplive.co.kr/'
-        }
-      },
-      '/api-ch': {
-        target: 'https://chapi.sooplive.co.kr',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api-ch/, ''),
-        headers: {
-          'Origin': 'https://www.sooplive.co.kr',
-          'Referer': 'https://www.sooplive.co.kr/'
-        }
+        await handler(req, res)
+      } catch (error) {
+        next(error)
       }
-    }
+    })
   }
+})
+
+export default defineConfig({
+  plugins: [react(), localApi()],
+  base: './'
 })

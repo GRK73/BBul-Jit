@@ -101,48 +101,6 @@ const CategoryFilter = React.memo(({ isOpen, selectedCategories, onToggleMenu, o
   </div>
 ));
 
-const normalizeImageUrl = (url) => {
-  if (!url) return '';
-  return url.startsWith('//') ? `https:${url}` : url;
-};
-
-const stripHtml = (value = '') => String(value)
-  .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-  .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-  .replace(/<br\s*\/?>/gi, ' ')
-  .replace(/<[^>]+>/g, ' ')
-  .replace(/&nbsp;/g, ' ')
-  .replace(/&amp;/g, '&')
-  .replace(/&lt;/g, '<')
-  .replace(/&gt;/g, '>')
-  .replace(/&#39;/g, "'")
-  .replace(/&quot;/g, '"')
-  .replace(/\s+/g, ' ')
-  .trim();
-
-const summarizeText = (post) => {
-  const content = post.content || {};
-  return [
-    content.textContent,
-    content.summary,
-    stripHtml(content.content || '')
-  ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-};
-
-const getPostUrl = (bjid, titleNo) => (
-  titleNo
-    ? `https://www.sooplive.co.kr/station/${bjid}/post/${titleNo}`
-    : `https://www.sooplive.co.kr/station/${bjid}`
-);
-
-const formatPostPreview = (post, bjid) => ({
-  id: post.titleNo,
-  title: post.titleName || '제목 없음',
-  content: summarizeText(post) || '내용 없음',
-  url: getPostUrl(bjid, post.titleNo)
-});
-
-
 const OfflinePostOverlay = React.memo(({ postsState, isVisible }) => {
   const posts = postsState?.items || [];
   const failed = postsState?.status === 'error';
