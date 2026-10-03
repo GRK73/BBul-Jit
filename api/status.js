@@ -3,16 +3,22 @@
 // 이렇게 나눠야 이 함수가 Hobby 플랜의 10초 타임아웃 안에서 안정적으로 끝난다.
 
 import { createRequire } from 'module';
+import { isChzzkId } from '../lib/platform.js';
 
 const require = createRequire(import.meta.url);
 const streamers = require('../streamers.json');
 
+const USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
 const SOOP_HEADERS = {
   Origin: 'https://www.sooplive.co.kr',
   Referer: 'https://www.sooplive.co.kr/',
-  'User-Agent':
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+  'User-Agent': USER_AGENT
 };
+
+const CHZZK_HEADERS = { 'User-Agent': USER_AGENT };
+const CHZZK_API = 'https://api.chzzk.naver.com';
 
 const ALL_STREAMER_IDS = Object.values(streamers).flat();
 const CATEGORY_BY_ID = Object.entries(streamers).reduce((acc, [category, ids]) => {
@@ -32,6 +38,47 @@ async function fetchWithTimeout(url, options = {}, ms = 4000) {
   }
 }
 
+// 치지직 방송 시작 시각은 "2026-10-03 21:28:27" 형식의 한국 시간이다.
+const secondsSince = openDate => {
+  const started = Date.parse(`${String(openDate).replace(' ', 'T')}+09:00`);
+  return Number.isNaN(started) ? 0 : Math.max(0, Math.floor((Date.now() - started) / 1000));
+};
+
+// 치지직은 상태 응답에 동접 수가 같이 오고, 썸네일·시작 시각만 라이브일 때 한 번 더 받는다.
+async function checkChzzk(channelId, base) {
+  const res = await fetchWithTimeout(
+    `${CHZZK_API}/polling/v2/channels/${channelId}/live-status`,
+    { headers: CHZZK_HEADERS },
+    4000
+  );
+  if (!res.ok) return base;
+  const live = (await res.json())?.content;
+  if (live?.status !== 'OPEN') return base;
+
+  let detail = null;
+  try {
+    const detailRes = await fetchWithTimeout(
+      `${CHZZK_API}/service/v3/channels/${channelId}/live-detail`,
+      { headers: CHZZK_HEADERS },
+      4000
+    );
+    if (detailRes.ok) detail = (await detailRes.json())?.content;
+  } catch {
+    /* 썸네일이 없어도 라이브 표시는 된다 */
+  }
+
+  return {
+    ...base,
+    isLive: true,
+    nick: detail?.channel?.channelName,
+    title: live.liveTitle,
+    duration: detail?.openDate ? secondsSince(detail.openDate) : 0,
+    viewer: live.concurrentUserCount ?? 'LIVE',
+    // 연령 제한 방송은 liveImageUrl이 비어 있다
+    thumb: detail?.liveImageUrl ? detail.liveImageUrl.replace('{type}', '480') : ''
+  };
+}
+
 async function checkOne(bjid) {
   const base = {
     id: bjid,
@@ -44,6 +91,8 @@ async function checkOne(bjid) {
   };
 
   try {
+    if (isChzzkId(bjid)) return await checkChzzk(bjid, base);
+
     const res = await fetchWithTimeout(
       `https://live.sooplive.co.kr/afreeca/player_live_api.php?bjid=${bjid}`,
       {
@@ -74,11 +123,12 @@ async function checkOne(bjid) {
   }
 }
 
-// 동접 수는 라이브 중인 사람만 조회한다. 보통 0~3명이라 호출 부담이 거의 없다.
+// 숲 동접 수는 라이브 중인 사람만 조회한다. 보통 0~3명이라 호출 부담이 거의 없다.
+// 치지직은 상태 응답에 이미 들어 있으므로 제외한다.
 async function fillViewerCounts(list) {
   await Promise.all(
     list
-      .filter((s) => s.isLive)
+      .filter((s) => s.isLive && !isChzzkId(s.id))
       .map(async (s) => {
         try {
           const res = await fetchWithTimeout(
@@ -88,7 +138,9 @@ async function fillViewerCounts(list) {
           );
           if (!res.ok) return;
           const data = await res.json();
-          if (data?.broad?.visitor_cnt != null) s.viewer = data.broad.visitor_cnt;
+          // 숲이 visitor_cnt를 current_sum_viewer로 바꿨다. 예전 이름도 혹시 몰라 남겨 둔다.
+          const count = data?.broad?.current_sum_viewer ?? data?.broad?.visitor_cnt;
+          if (count != null) s.viewer = count;
         } catch {
           /* 동접 수는 없어도 화면이 뜨므로 조용히 넘어간다 */
         }

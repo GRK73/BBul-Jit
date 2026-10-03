@@ -26,6 +26,6 @@ export const streamerConfig = {
   "bver99": { name: "빕어", category: "사장" },
   "ch1ch1r0": { name: "찌로", category: "BIP" },
   "hobal115end": { name: "호발", category: "BIP" },
-  "kangturtle": { name: "한세현", category: "BIP" },
+  "9dc2f676ede9b24914a67f8cd51cd23b": { name: "한세현", category: "BIP" }, // 치지직
   "daniyan1030": { name: "다니얀", category: "BIP" }
 };
