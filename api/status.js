@@ -2,11 +2,8 @@
 // 프로필/다시보기처럼 잘 안 바뀌는 값은 /api/profiles가 따로 담당한다.
 // 이렇게 나눠야 이 함수가 Hobby 플랜의 10초 타임아웃 안에서 안정적으로 끝난다.
 
-import { createRequire } from 'module';
 import { isChzzkId } from '../lib/platform.js';
-
-const require = createRequire(import.meta.url);
-const streamers = require('../streamers.json');
+import { ALL_STREAMER_IDS, MEMBERS } from '../lib/roster.js';
 
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
@@ -19,14 +16,6 @@ const SOOP_HEADERS = {
 
 const CHZZK_HEADERS = { 'User-Agent': USER_AGENT };
 const CHZZK_API = 'https://api.chzzk.naver.com';
-
-const ALL_STREAMER_IDS = Object.values(streamers).flat();
-const CATEGORY_BY_ID = Object.entries(streamers).reduce((acc, [category, ids]) => {
-  ids.forEach((id) => {
-    acc[id] = category;
-  });
-  return acc;
-}, {});
 
 async function fetchWithTimeout(url, options = {}, ms = 4000) {
   const controller = new AbortController();
@@ -82,7 +71,7 @@ async function checkChzzk(channelId, base) {
 async function checkOne(bjid) {
   const base = {
     id: bjid,
-    categoryKey: CATEGORY_BY_ID[bjid] || 'Others',
+    categoryKey: MEMBERS[bjid].groupKey,
     isLive: false,
     title: '',
     viewer: 'OFFLINE',

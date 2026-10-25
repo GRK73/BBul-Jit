@@ -1,33 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
-import streamers from '../streamers.json';
 import StarBorder from './components/StarBorder';
 import ElectricBorder from './components/ElectricBorder';
-import { streamerConfig } from './streamerConfig';
 import { isChzzkId, liveUrl, channelUrl } from '../lib/platform';
+import { GROUPS, MEMBERS } from '../lib/roster';
 
-const CATEGORY_OPTIONS = [
-  { key: 'Plan-B', label: '플랜비' },
-  { key: 'BIP', label: 'BIP' },
-  { key: 'Generation 1', label: '1기' },
-  { key: 'Generation 2', label: '2기' },
-  { key: 'Generation 3', label: '3기' },
-  { key: 'Generation 4', label: '4기' },
-  { key: 'Others', label: '기타' }
-];
-
-const streamerCategoryById = Object.entries(streamers).reduce((acc, [category, ids]) => {
-  ids.forEach(id => {
-    acc[id] = category;
-  });
-  return acc;
-}, {});
-
-const ALL_STREAMER_IDS = Object.values(streamers).flat();
-const streamerOrderById = ALL_STREAMER_IDS.reduce((acc, id, index) => {
-  acc[id] = index;
-  return acc;
-}, {});
+const CATEGORY_OPTIONS = GROUPS.map(({ key, label }) => ({ key, label }));
 
 // 최애 고정은 보는 사람 브라우저에만 저장한다. 저장소가 막힌 환경(시크릿 모드 등)에서는 조용히 무시.
 const PINNED_KEY = 'planb:pinned';
@@ -35,7 +13,7 @@ const PINNED_KEY = 'planb:pinned';
 const readPinnedIds = () => {
   try {
     const saved = JSON.parse(localStorage.getItem(PINNED_KEY) || '[]');
-    return Array.isArray(saved) ? saved.filter(id => id in streamerOrderById) : [];
+    return Array.isArray(saved) ? saved.filter(id => id in MEMBERS) : [];
   } catch {
     return [];
   }
@@ -374,12 +352,12 @@ const App = () => {
   const merge = useCallback((list, profiles) => {
     const cacheBust = Date.now();
     return list.map(s => {
-      const info = streamerConfig[s.id] || {};
+      const info = MEMBERS[s.id] || {};
       const prof = profiles[s.id] || {};
       return {
         ...s,
         nick: info.name || s.nick || prof.nick || s.id,
-        category: info.category || "",
+        category: info.tag || '',
         replay: prof.replay || null,
         // 라이브 썸네일만 매번 새로 받는다(응답 캐시는 살려야 하므로 여기서 붙인다).
         thumb: s.isLive && s.thumb ? `${s.thumb}?v=${cacheBust}` : prof.thumb || ''
@@ -451,7 +429,7 @@ const App = () => {
         const aPinned = pinnedIds.includes(a.id);
         if (aPinned !== pinnedIds.includes(b.id)) return aPinned ? -1 : 1;
         if (showAllStreamers && a.isLive !== b.isLive) return a.isLive ? -1 : 1;
-        return (streamerOrderById[a.id] ?? 0) - (streamerOrderById[b.id] ?? 0);
+        return (MEMBERS[a.id]?.order ?? 0) - (MEMBERS[b.id]?.order ?? 0);
       });
   }, [streamerStatuses, selectedCategories, showAllStreamers, pinnedIds]);
 

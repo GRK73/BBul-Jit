@@ -1,11 +1,8 @@
 // /api/profiles — 닉네임, 프로필 이미지, 최근 다시보기처럼 잘 바뀌지 않는 값.
 // 10분 캐시. 클라이언트도 최초 1회만 부르면 되므로 /api/status와 주기를 분리했다.
 
-import { createRequire } from 'module';
 import { isChzzkId } from '../lib/platform.js';
-
-const require = createRequire(import.meta.url);
-const streamers = require('../streamers.json');
+import { ALL_STREAMER_IDS } from '../lib/roster.js';
 
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
@@ -18,8 +15,6 @@ const SOOP_HEADERS = {
 
 const CHZZK_HEADERS = { 'User-Agent': USER_AGENT };
 const CHZZK_API = 'https://api.chzzk.naver.com';
-
-const ALL_STREAMER_IDS = Object.values(streamers).flat();
 
 const normalizeImageUrl = (url) => {
   if (!url) return '';
