@@ -27,26 +27,19 @@ const savePinnedIds = ids => {
   }
 };
 
-const DecoIcon = React.memo(() => (
-  <svg width="40" height="24" viewBox="0 0 81 30" fill="none" className="opacity-80 md:w-[50px] md:h-[30px]">
-    <path d="M0 16H63L68 5L73 25.5L79.5 16" stroke="white" strokeWidth="3"/>
-  </svg>
-));
+const LOGO_SRC = '/bip-logo.png';
 
-const GlitteringLogo = React.memo(({ sizeClass = "text-[4rem] md:text-[10rem]" }) => (
-  <div className="flex flex-col items-center justify-center font-planb">
-    <h1 className={`stack select-none mb-0 ${sizeClass}`} style={{ "--stacks": 3 }}>
-      <span style={{ "--index": 0 }}>PLAN.B</span>
-      <span style={{ "--index": 1 }}>PLAN.B</span>
-      <span style={{ "--index": 2 }}>PLAN.B</span>
-    </h1>
-    <div className="flex items-center w-full px-2 gap-3 md:gap-6 -mt-2 md:-mt-8">
-      <DecoIcon />
-      <span className="flex-1 text-center font-bold tracking-[0.5em] md:tracking-[0.8em] text-sm md:text-3xl translate-x-[0.2em] md:translate-x-[0.4em] text-white">
-        MUSIC
-      </span>
-      <div className="scale-x-[-1]"><DecoIcon /></div>
-    </div>
+// 같은 로고 이미지 3장을 가로로 잘라 겹쳐서 글리치 효과를 낸다 (index.html의 .stack 참고).
+const GlitteringLogo = React.memo(({ sizeClass = 'w-[280px] md:w-[560px]' }) => (
+  <div
+    className={`stack select-none ${sizeClass}`}
+    style={{ '--stacks': 3 }}
+    role="img"
+    aria-label="BIP Entertainment"
+  >
+    {[0, 1, 2].map(index => (
+      <img key={index} src={LOGO_SRC} alt="" draggable="false" className="block h-auto w-full" style={{ '--index': index }} />
+    ))}
   </div>
 ));
 
@@ -225,8 +218,8 @@ const StreamerCard = React.memo(({ streamer, postsState, onLoadPosts, isPinned, 
               }`}
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-white/20 font-planb text-xl md:text-3xl">
-              PLAN.B
+            <div className="flex h-full w-full items-center justify-center">
+              <img src={LOGO_SRC} alt="" className="w-1/3 h-auto opacity-20" />
             </div>
           )}
           {/* 왼쪽 위는 상태(시청자 수 / OFFLINE), 오른쪽 위는 고정 버튼 */}
@@ -515,9 +508,9 @@ const App = () => {
     />
   );
   if (loading) return (
-    <div className="min-h-screen bg-black flex items-center justify-center text-white font-planb">
+    <div className="min-h-screen bg-black flex items-center justify-center">
       {categoryFilter}
-      <div className="text-2xl md:text-4xl animate-pulse tracking-widest text-white">PLAN.B</div>
+      <img src={LOGO_SRC} alt="BIP Entertainment" className="w-40 md:w-56 h-auto animate-pulse" />
     </div>
   );
 
@@ -552,9 +545,9 @@ const App = () => {
               disabled={liveStreamers.length === 0}
               aria-label="방송 중인 멤버 중 랜덤으로 보기"
               title="랜덤 라이브 보기"
-              className="scale-75 md:scale-75 origin-center md:origin-left text-white transition-opacity duration-300 hover:opacity-80 disabled:cursor-default disabled:hover:opacity-100"
+              className="transition-opacity duration-300 hover:opacity-80 disabled:cursor-default disabled:hover:opacity-100"
             >
-              <GlitteringLogo sizeClass="text-[4rem] md:text-[6rem]" />
+              <GlitteringLogo sizeClass="w-[200px] md:w-[300px]" />
             </button>
             <button
               type="button"
