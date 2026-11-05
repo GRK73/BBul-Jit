@@ -69,7 +69,8 @@ async function loadProfile(bjid) {
 
   const [station, vods] = await Promise.all([
     getJson(`https://chapi.sooplive.co.kr/api/${bjid}/station`, 5000).catch(() => null),
-    getJson(`https://chapi.sooplive.co.kr/api/${bjid}/vods?page=1`, 5000).catch(() => null)
+    // 정렬을 안 붙이면 날짜순이 아니라서 첫 항목이 최신이 아니다. 다시보기만, 최신순으로 받는다.
+    getJson(`https://chapi.sooplive.co.kr/api/${bjid}/vods/review?page=1&orderby=reg_date`, 5000).catch(() => null)
   ]);
 
   const latest = vods?.data?.[0];
