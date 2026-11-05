@@ -538,14 +538,14 @@ const App = () => {
       ) : (
         // [LIVE MODE]
         <div className="max-w-7xl mx-auto p-4 md:p-16">
-          <div className="flex flex-col md:flex-row justify-between items-center mb-12 md:mb-24 gap-8 md:gap-12 pb-8 md:pb-16 border-b border-white/5 text-center md:text-left">
+          <div className="flex flex-col md:flex-row justify-between items-center mb-12 md:mb-24 gap-8 md:gap-12 pb-8 md:pb-[124px] border-b border-white/5 text-center md:text-left">
             <button
               type="button"
               onClick={openRandomLive}
               disabled={liveStreamers.length === 0}
               aria-label="방송 중인 멤버 중 랜덤으로 보기"
               title="랜덤 라이브 보기"
-              className="transition-opacity duration-300 hover:opacity-80 disabled:cursor-default disabled:hover:opacity-100"
+              className="md:translate-y-[60px] transition-opacity duration-300 hover:opacity-80 disabled:cursor-default disabled:hover:opacity-100"
             >
               <GlitteringLogo sizeClass="w-[200px] md:w-[300px]" />
             </button>
