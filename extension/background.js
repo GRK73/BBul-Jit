@@ -174,7 +174,7 @@ async function sync(topLevelSite, storeId, tab) {
     copies: await listCopies(topLevelSite, storeId),
     stores: diagnosis.stores,
     soopCookies: diagnosis.cookies,
-    events: (await chrome.storage.session.get(EVENTS_KEY))[EVENTS_KEY] || []
+    events: await readTicketEvents()
   };
 }
 
@@ -209,10 +209,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // 시험판 진단용: 로그인 쿠키가 언제, 왜 바뀌었는지 최근 40건을 기록한다(값은 기록하지 않는다).
 // 원본이 사라진 시점과 원인(cause)을 보면 확장이 지운 건지, 숲 서버가 지운 건지 가릴 수 있다.
-const EVENTS_KEY = 'ticketEvents';
+// 세 쿠키가 동시에 바뀌면 "읽고-붙이고-쓰기"가 서로 덮어써서 기록이 빠지므로, 이벤트마다 따로 키를 만든다.
+const EVENT_PREFIX = 'ticketEvent:';
 async function logTicketEvent(entry) {
-  const { [EVENTS_KEY]: events = [] } = await chrome.storage.session.get(EVENTS_KEY);
-  await chrome.storage.session.set({ [EVENTS_KEY]: [...events, entry].slice(-40) });
+  const key = `${EVENT_PREFIX}${Date.now()}:${crypto.randomUUID()}`;
+  await chrome.storage.session.set({ [key]: { ...entry, at: Date.now() } });
+}
+
+async function readTicketEvents() {
+  const all = await chrome.storage.session.get(null);
+  const entries = Object.entries(all).filter(([key]) => key.startsWith(EVENT_PREFIX));
+  entries.sort((a, b) => a[1].at - b[1].at);
+  // 오래된 기록은 정리해서 최근 40건만 남긴다.
+  const stale = entries.slice(0, -40).map(([key]) => key);
+  if (stale.length) await chrome.storage.session.remove(stale);
+  return entries.slice(-40).map(([, value]) => value);
 }
 
 chrome.cookies.onChanged.addListener(({ cookie, removed, cause }) => {
