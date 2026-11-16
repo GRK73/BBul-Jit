@@ -1,13 +1,25 @@
 // 숲 로그인 쿠키(원본, SameSite=Lax)를 멀티뷰 사이트 전용 분할 쿠키(SameSite=None; Secure; Partitioned)로 복사한다.
 // 분할 쿠키는 "그 사이트가 최상위로 열렸을 때 안에 뜬 숲 iframe"에만 붙으므로 다른 사이트에는 노출되지 않는다.
 // 시험판: 어떤 조합이 실제로 먹히는지 보려고 결과를 자세히 돌려준다. 쿠키 값은 절대 밖으로 내보내지 않는다.
+//
+// 서비스 워커는 30초쯤 쉬면 꺼지므로 상태는 전역 변수가 아니라 chrome.storage.session에 둔다.
+// 리스너는 모두 최상위에서 동기적으로 등록한다(꺼졌다 켜질 때 이벤트를 다시 받으려면 필요하다).
 
 importScripts('sites.js');
 
 const TICKETS = ['AuthTicket', 'UserTicket', 'BbsTicket'];
 // iframe 바로 아래 문맥에서 어느 값이 맞는지 아직 모르므로 둘 다 써 보고 결과를 기록한다.
-const ANCESTOR_BITS = [true, false];
+// undefined는 hasCrossSiteAncestor를 모르는 구버전 크롬용이다.
+const ANCESTOR_BITS = [true, false, undefined];
 const SITES_KEY = 'topLevelSites';
+const SOOP_DOMAIN = /(^|\.)sooplive\.(com|co\.kr)$/;
+
+const isSoopCookie = c => SOOP_DOMAIN.test(c.domain.replace(/^\./, ''));
+const cookieUrl = c => `https://${c.domain.replace(/^\./, '')}${c.path || '/'}`;
+const errorText = error => String(error?.message || error);
+
+const partitionKeyFor = (topLevelSite, hasCrossSiteAncestor) =>
+  hasCrossSiteAncestor === undefined ? { topLevelSite } : { topLevelSite, hasCrossSiteAncestor };
 
 const describe = c => ({
   name: c.name,
@@ -21,22 +33,16 @@ const describe = c => ({
   partitionKey: c.partitionKey || null
 });
 
-const cookieUrl = c => `https://${c.domain.replace(/^\./, '')}${c.path || '/'}`;
-
 async function readOriginals() {
   const found = await Promise.all(TICKETS.map(name => chrome.cookies.getAll({ name })));
   // partitionKey 없이 getAll하면 원본(비분할) 쿠키만 온다. 숲 도메인 것만 남긴다.
-  return found.flat().filter(c => !c.partitionKey && /(^|\.)sooplive\.(com|co\.kr)$/.test(c.domain.replace(/^\./, '')));
+  return found.flat().filter(c => !c.partitionKey && isSoopCookie(c));
 }
-
-const partitionKeyFor = (topLevelSite, hasCrossSiteAncestor) =>
-  hasCrossSiteAncestor === undefined ? { topLevelSite } : { topLevelSite, hasCrossSiteAncestor };
 
 async function writeCopies(topLevelSite, originals) {
   const writes = [];
   for (const c of originals) {
-    // 구버전 크롬은 hasCrossSiteAncestor를 모르므로 마지막에 필드 없이도 시도한다.
-    for (const bit of [...ANCESTOR_BITS, undefined]) {
+    for (const bit of ANCESTOR_BITS) {
       const details = {
         url: cookieUrl(c),
         name: c.name,
@@ -51,11 +57,12 @@ async function writeCopies(topLevelSite, originals) {
       // 원본이 세션 쿠키면 만료일을 넣지 않아 사본도 세션 쿠키로 둔다.
       if (!c.session && c.expirationDate) details.expirationDate = c.expirationDate;
 
+      const row = { name: c.name, domain: c.domain, hasCrossSiteAncestor: bit ?? 'unset' };
       try {
         const result = await chrome.cookies.set(details);
-        writes.push({ name: c.name, domain: c.domain, hasCrossSiteAncestor: bit ?? 'unset', ok: !!result });
+        writes.push({ ...row, ok: Boolean(result) });
       } catch (error) {
-        writes.push({ name: c.name, domain: c.domain, hasCrossSiteAncestor: bit ?? 'unset', ok: false, error: String(error?.message || error) });
+        writes.push({ ...row, ok: false, error: errorText(error) });
       }
     }
   }
@@ -63,46 +70,48 @@ async function writeCopies(topLevelSite, originals) {
 }
 
 async function listCopies(topLevelSite) {
-  const lists = await Promise.all(
-    [...ANCESTOR_BITS, undefined].map(bit =>
-      chrome.cookies.getAll({ partitionKey: partitionKeyFor(topLevelSite, bit) }).catch(() => [])
-    )
-  );
   const seen = new Set();
-  return lists
-    .flat()
-    .filter(c => TICKETS.includes(c.name))
-    .filter(c => {
+  const copies = [];
+  for (const bit of ANCESTOR_BITS) {
+    let found = [];
+    try {
+      found = await chrome.cookies.getAll({ partitionKey: partitionKeyFor(topLevelSite, bit) });
+    } catch {
+      continue; // 이 크롬이 해당 분할 키 형식을 모르면 건너뛴다
+    }
+    for (const c of found) {
+      if (!TICKETS.includes(c.name)) continue;
       const key = `${c.name}|${c.domain}|${JSON.stringify(c.partitionKey)}`;
-      if (seen.has(key)) return false;
+      if (seen.has(key)) continue;
       seen.add(key);
-      return true;
-    })
-    .map(describe);
-}
-
-async function removeCopies(topLevelSite) {
-  const copies = await listCopies(topLevelSite);
-  await Promise.all(
-    copies.map(c =>
-      chrome.cookies
-        .remove({ url: cookieUrl(c), name: c.name, partitionKey: c.partitionKey })
-        .catch(() => null)
-    )
-  );
-  return copies.length;
-}
-
-async function rememberSite(topLevelSite) {
-  const { [SITES_KEY]: sites = [] } = await chrome.storage.session.get(SITES_KEY);
-  if (!sites.includes(topLevelSite)) {
-    await chrome.storage.session.set({ [SITES_KEY]: [...sites, topLevelSite] });
+      copies.push(describe(c));
+    }
   }
+  return copies;
+}
+
+async function removeCopies(topLevelSite, name) {
+  const copies = (await listCopies(topLevelSite)).filter(c => !name || c.name === name);
+  for (const c of copies) {
+    try {
+      await chrome.cookies.remove({ url: cookieUrl(c), name: c.name, partitionKey: c.partitionKey });
+    } catch (error) {
+      console.warn('사본 삭제 실패', c.name, errorText(error));
+    }
+  }
+  return copies.length;
 }
 
 async function knownSites() {
   const { [SITES_KEY]: sites = [] } = await chrome.storage.session.get(SITES_KEY);
   return sites;
+}
+
+async function rememberSite(topLevelSite) {
+  const sites = await knownSites();
+  if (!sites.includes(topLevelSite)) {
+    await chrome.storage.session.set({ [SITES_KEY]: [...sites, topLevelSite] });
+  }
 }
 
 async function sync(topLevelSite) {
@@ -121,40 +130,48 @@ async function sync(topLevelSite) {
   };
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+async function handleMessage(message, sender) {
   // 콘텐츠 스크립트(bridge.js)가 허용된 최상위 페이지에서 보낸 요청만 받는다.
-  const origin = sender.origin || (sender.url && new URL(sender.url).origin);
+  const origin = sender.origin || (sender.url ? new URL(sender.url).origin : '');
   if (!origin || !isAllowedOrigin(origin) || sender.frameId !== 0) {
-    sendResponse({ ok: false, error: `허용되지 않은 출처: ${origin}` });
-    return false;
+    return { ok: false, error: `허용되지 않은 출처: ${origin}` };
   }
 
   // 분할 키는 "사이트"(스킴+호스트) 단위라 포트를 뺀다. vercel.app은 공개 접미사라 호스트 전체가 한 사이트다.
   const { protocol, hostname } = new URL(origin);
   const topLevelSite = `${protocol}//${hostname}`;
 
-  const task =
-    message?.type === 'sync'
-      ? sync(topLevelSite)
-      : message?.type === 'clear'
-        ? removeCopies(topLevelSite).then(removed => ({ ok: true, removed }))
-        : Promise.resolve({ ok: false, error: 'unknown message' });
+  if (message?.type === 'sync') return sync(topLevelSite);
+  if (message?.type === 'clear') return { ok: true, removed: await removeCopies(topLevelSite) };
+  return { ok: false, error: 'unknown message' };
+}
 
-  task.then(sendResponse, error => sendResponse({ ok: false, error: String(error?.message || error) }));
-  return true; // 비동기 응답
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  (async () => {
+    try {
+      sendResponse(await handleMessage(message, sender));
+    } catch (error) {
+      sendResponse({ ok: false, error: errorText(error) });
+    }
+  })();
+  return true; // 비동기 응답을 기다리도록 채널을 열어 둔다
 });
 
 // 숲에서 다시 로그인하거나 로그아웃하면 사본도 따라간다.
-let resyncTimer = null;
-chrome.cookies.onChanged.addListener(({ cookie }) => {
-  if (!TICKETS.includes(cookie.name) || cookie.partitionKey) return;
-  clearTimeout(resyncTimer);
-  // 로그인·로그아웃 때 세 쿠키가 연달아 바뀌므로 잠깐 모았다가 한 번에 처리한다.
-  resyncTimer = setTimeout(async () => {
-    for (const site of await knownSites()) {
-      const originals = await readOriginals();
-      await removeCopies(site);
-      if (originals.length) await writeCopies(site, originals);
+// 타이머로 모으지 않고 쿠키 하나씩 처리한다(서비스 워커가 꺼지면 타이머도 사라진다).
+chrome.cookies.onChanged.addListener(({ cookie, removed, cause }) => {
+  if (!TICKETS.includes(cookie.name) || cookie.partitionKey || !isSoopCookie(cookie)) return;
+  // 값이 바뀔 때는 'overwrite' 삭제 이벤트 뒤에 새 쿠키 추가 이벤트가 온다. 추가 쪽에서 덮어쓰면 된다.
+  if (removed && cause === 'overwrite') return;
+
+  (async () => {
+    try {
+      for (const site of await knownSites()) {
+        if (removed) await removeCopies(site, cookie.name);
+        else await writeCopies(site, [cookie]);
+      }
+    } catch (error) {
+      console.error('사본 동기화 실패', errorText(error));
     }
-  }, 300);
+  })();
 });

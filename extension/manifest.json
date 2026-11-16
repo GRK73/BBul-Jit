@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
   "name": "PLAN.B 멀티뷰 로그인 도우미 (시험판)",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "PLAN.B 멀티뷰 페이지 안의 숲 플레이어에서만 로그인 상태를 쓰도록 로그인 쿠키를 분할 쿠키로 복사합니다.",
+  "minimum_chrome_version": "119",
   "permissions": ["cookies", "storage"],
   "host_permissions": [
     "https://*.sooplive.com/*",
@@ -13,7 +14,11 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://*.vercel.app/*", "http://localhost/*"],
+      "matches": [
+        "https://planb-livecheck.vercel.app/*",
+        "https://b-bul-cfgrce26i-grks-projects-0da57458.vercel.app/*",
+        "http://localhost/*"
+      ],
       "js": ["sites.js", "bridge.js"],
       "run_at": "document_start",
       "all_frames": false
