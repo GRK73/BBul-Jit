@@ -4,3 +4,4 @@ GROQ_KEY.txt
 .env
 node_modules/
 .gemini/
+dist/
