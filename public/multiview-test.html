@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>멀티뷰 로그인 시험</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #000; color: #eee; font: 14px/1.5 system-ui, sans-serif; }
+    header { padding: 16px; border-bottom: 1px solid #222; display: grid; gap: 12px; }
+    h1 { margin: 0; font-size: 18px; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    input { flex: 1; min-width: 220px; padding: 8px 10px; border-radius: 8px; border: 1px solid #333; background: #111; color: #eee; }
+    button { padding: 8px 12px; border-radius: 8px; border: 1px solid #444; background: #1a1a1a; color: #eee; cursor: pointer; }
+    button:hover { background: #fff; color: #000; }
+    .badge { padding: 2px 10px; border-radius: 999px; font-weight: 700; font-size: 12px; }
+    .ok { background: #0f3d22; color: #7dffa8; }
+    .bad { background: #4a1212; color: #ff8d8d; }
+    .wait { background: #333; color: #ccc; }
+    details { background: #0b0b0b; border: 1px solid #222; border-radius: 8px; padding: 8px 12px; }
+    summary { cursor: pointer; font-weight: 700; }
+    table { border-collapse: collapse; width: 100%; font-size: 12px; margin-top: 8px; }
+    th, td { border: 1px solid #222; padding: 4px 6px; text-align: left; white-space: nowrap; }
+    .scroll { overflow-x: auto; }
+    pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: #aaa; }
+    main { display: grid; gap: 8px; padding: 8px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); }
+    .cell { position: relative; aspect-ratio: 16 / 9; background: #0a0a0a; border: 1px solid #222; border-radius: 8px; overflow: hidden; }
+    .cell iframe { width: 100%; height: 100%; border: 0; }
+    .cell span { position: absolute; left: 8px; top: 8px; font-size: 11px; background: #000a; padding: 2px 8px; border-radius: 999px; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>멀티뷰 로그인 시험 (0단계)</h1>
+    <div class="row">
+      확장: <span id="ext" class="badge wait">확인 중…</span>
+      숲 원본 로그인: <span id="login" class="badge wait">-</span>
+      분할 사본: <span id="copies" class="badge wait">-</span>
+    </div>
+    <div class="row">
+      <input id="ids" placeholder="숲 아이디를 쉼표로 (예: bver99, ch1ch1r0)" />
+      <button id="apply">플레이어 다시 띄우기</button>
+      <button id="resync">쿠키 다시 복사</button>
+      <button id="clear">사본 삭제(비교용)</button>
+    </div>
+    <details>
+      <summary>진단 결과 (쿠키 값은 표시하지 않음)</summary>
+      <div class="scroll" id="report"></div>
+    </details>
+  </header>
+  <main id="grid"></main>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const setBadge = (el, cls, text) => { el.className = `badge ${cls}`; el.textContent = text; };
+    const SOOP_ID = /^[a-z0-9_]{3,20}$/i;
+
+    // ---- 확장과 대화 (bridge.js가 같은 창에서 받아 준다) ----
+    let extReady = false;
+    const pending = {};
+    window.addEventListener('message', event => {
+      if (event.source !== window || event.origin !== location.origin) return;
+      const data = event.data;
+      if (!data || data.source !== 'planb-mv-ext') return;
+      if (data.type === 'ready') {
+        extReady = true;
+        setBadge($('ext'), 'ok', `감지됨 v${data.version}`);
+      }
+      const resolve = pending[data.type];
+      if (resolve) { delete pending[data.type]; resolve(data.report); }
+    });
+
+    const ask = (type, ms = 4000) => new Promise(resolve => {
+      pending[`${type}-result`] = resolve;
+      window.postMessage({ source: 'planb-mv-page', type }, location.origin);
+      setTimeout(() => {
+        if (pending[`${type}-result`]) { delete pending[`${type}-result`]; resolve(null); }
+      }, ms);
+    });
+
+    // ---- 진단 표 ----
+    const table = (title, rows, cols) => {
+      const wrap = document.createElement('div');
+      const h = document.createElement('p');
+      h.textContent = `${title} (${rows.length})`;
+      wrap.appendChild(h);
+      if (!rows.length) return wrap;
+      const t = document.createElement('table');
+      const head = t.insertRow();
+      cols.forEach(c => { const th = document.createElement('th'); th.textContent = c; head.appendChild(th); });
+      rows.forEach(r => {
+        const tr = t.insertRow();
+        cols.forEach(c => {
+          const v = r[c];
+          tr.insertCell().textContent = v && typeof v === 'object' ? JSON.stringify(v) : String(v ?? '');
+        });
+      });
+      wrap.appendChild(t);
+      return wrap;
+    };
+
+    const showReport = report => {
+      const box = $('report');
+      box.replaceChildren();
+      if (!report) {
+        box.textContent = '확장 응답 없음';
+        return;
+      }
+      if (!report.ok) {
+        setBadge($('copies'), 'bad', '실패');
+        box.textContent = `오류: ${report.error}`;
+        return;
+      }
+      setBadge($('login'), report.loggedIn ? 'ok' : 'bad', report.loggedIn ? '로그인됨' : '로그인 안 됨');
+      const okWrites = report.writes.filter(w => w.ok).length;
+      setBadge($('copies'), report.copies.length ? 'ok' : 'bad', `${report.copies.length}개 (쓰기 성공 ${okWrites}/${report.writes.length})`);
+
+      const meta = document.createElement('pre');
+      meta.textContent = `topLevelSite: ${report.topLevelSite}\n${report.browser}`;
+      box.append(
+        meta,
+        table('원본 쿠키', report.originals, ['name', 'domain', 'hostOnly', 'path', 'httpOnly', 'secure', 'sameSite', 'session']),
+        table('사본 쓰기 시도', report.writes, ['name', 'domain', 'hasCrossSiteAncestor', 'ok', 'error']),
+        table('현재 분할 사본', report.copies, ['name', 'domain', 'path', 'httpOnly', 'secure', 'sameSite', 'session', 'partitionKey'])
+      );
+    };
+
+    // ---- 플레이어 ----
+    const currentIds = () =>
+      $('ids').value.split(/[\s,]+/).map(s => s.trim()).filter(id => SOOP_ID.test(id)).slice(0, 6);
+
+    const renderPlayers = () => {
+      const ids = currentIds();
+      const url = new URL(location.href);
+      url.searchParams.set('ids', ids.join(','));
+      history.replaceState(null, '', url);
+
+      $('grid').replaceChildren(...ids.map(id => {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        const frame = document.createElement('iframe');
+        frame.src = `https://play.sooplive.com/${encodeURIComponent(id)}/embed`;
+        frame.allow = 'autoplay; fullscreen; encrypted-media; picture-in-picture';
+        frame.allowFullscreen = true;
+        const label = document.createElement('span');
+        label.textContent = id;
+        cell.append(frame, label);
+        return cell;
+      }));
+    };
+
+    const syncThenRender = async () => {
+      if (extReady) showReport(await ask('sync'));
+      renderPlayers();
+    };
+
+    $('apply').onclick = renderPlayers;
+    $('resync').onclick = syncThenRender;
+    $('clear').onclick = async () => {
+      const r = await ask('clear');
+      setBadge($('copies'), 'wait', r?.ok ? `삭제함 ${r.removed}개` : '삭제 실패');
+      renderPlayers();
+    };
+
+    // ---- 시작: 아이디 채우기 → 확장 기다리기 → 쿠키 복사 → 플레이어 ----
+    (async () => {
+      const fromUrl = new URLSearchParams(location.search).get('ids');
+      if (fromUrl) {
+        $('ids').value = fromUrl;
+      } else {
+        try {
+          const res = await fetch('/api/status');
+          const live = ((await res.json()).streamers || []).filter(s => s.isLive && SOOP_ID.test(s.id));
+          $('ids').value = live.slice(0, 4).map(s => s.id).join(', ') || 'bver99';
+        } catch {
+          $('ids').value = 'bver99';
+        }
+      }
+
+      // 확장이 있으면 bridge.js가 곧바로 ready를 보낸다. 잠깐 기다려도 없으면 확장 없이 띄운다.
+      for (let i = 0; i < 20 && !extReady; i++) {
+        window.postMessage({ source: 'planb-mv-page', type: 'ping' }, location.origin);
+        await new Promise(r => setTimeout(r, 50));
+      }
+      if (!extReady) setBadge($('ext'), 'bad', '없음 (비로그인으로 표시)');
+      await syncThenRender();
+    })();
+  </script>
+</body>
+</html>
