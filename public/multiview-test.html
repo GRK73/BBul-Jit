@@ -61,6 +61,7 @@
       <button id="apply">플레이어 다시 띄우기</button>
       <button id="resync">쿠키 다시 복사</button>
       <button id="clear">사본 삭제(비교용)</button>
+      <button id="selftest">안전 시험(가짜 쿠키)</button>
     </div>
     <details>
       <summary>진단 결과 (쿠키 값은 표시하지 않음)</summary>
@@ -215,6 +216,19 @@
 
     $('apply').onclick = renderPlayers;
     $('resync').onclick = syncThenRender;
+    // 진짜 로그인 쿠키 대신 가짜 쿠키로 "사본 삭제가 원본을 건드리지 않는지" 확인한다.
+    $('selftest').onclick = async () => {
+      const r = await ask('selftest', 8000);
+      const box = $('report');
+      box.closest('details').open = true;
+      const title = document.createElement('p');
+      title.textContent = !r ? '안전 시험: 확장 응답 없음'
+        : !r.ok ? `안전 시험 오류: ${r.error}`
+        : r.safe ? '안전 시험 통과: 사본만 지워지고 원본은 남았어요'
+        : '안전 시험 실패: 원본이 지워졌거나 사본이 남았어요';
+      box.prepend(title, ...(r?.steps ? [table('안전 시험 단계', r.steps, ['step', 'original', 'copies'])] : []));
+    };
+
     $('clear').onclick = async () => {
       const r = await ask('clear');
       setBadge($('copies'), 'wait', r?.ok ? `삭제함 ${r.removed}개` : '삭제 실패');

@@ -101,16 +101,77 @@ async function listCopies(topLevelSite, storeId) {
   return copies;
 }
 
+// ⚠️ chrome.cookies.remove는 절대 쓰지 않는다.
+// partitionKey를 줘도 같은 이름의 원본(비분할) 쿠키까지 지워서, 시험 중 숲에서 두 번 로그아웃됐다(크롬 157 실측).
+// 대신 같은 분할 키로 "이미 만료된 쿠키"를 덮어써서 사본만 없앤다. set은 지정한 분할 안에서만 동작하는 걸 기록으로 확인했다.
+async function expireCopy(c, storeId) {
+  const details = {
+    url: cookieUrl(c),
+    name: c.name,
+    value: '',
+    path: c.path,
+    secure: true,
+    httpOnly: c.httpOnly,
+    sameSite: 'no_restriction',
+    storeId,
+    partitionKey: c.partitionKey,
+    expirationDate: 1 // 1970년: 쓰는 즉시 만료돼 사라진다
+  };
+  if (!c.hostOnly) details.domain = c.domain;
+  await chrome.cookies.set(details);
+}
+
 async function removeCopies(topLevelSite, storeId, name) {
   const copies = (await listCopies(topLevelSite, storeId)).filter(c => !name || c.name === name);
   for (const c of copies) {
     try {
-      await chrome.cookies.remove({ url: cookieUrl(c), name: c.name, storeId, partitionKey: c.partitionKey });
+      await expireCopy(c, storeId);
     } catch (error) {
       console.warn('사본 삭제 실패', c.name, errorText(error));
     }
   }
   return copies.length;
+}
+
+// 가짜 쿠키로 "사본 삭제가 원본을 건드리지 않는지" 확인한다. 진짜 로그인 쿠키는 건드리지 않는다.
+async function selfTest(topLevelSite, storeId) {
+  const NAME = 'PlanbMultiviewSelfTest';
+  const base = { url: 'https://www.sooplive.com/', name: NAME, path: '/', domain: '.sooplive.com', storeId };
+  const findOriginal = async () =>
+    (await chrome.cookies.getAll({ name: NAME, storeId })).filter(c => !c.partitionKey).length;
+  const findCopies = async () => (await listCopiesNamed(topLevelSite, storeId, NAME)).length;
+  const steps = [];
+  try {
+    // 원본처럼: Secure 없음, SameSite 미지정, 세션 쿠키
+    await chrome.cookies.set({ ...base, value: 'original' });
+    const [original] = (await chrome.cookies.getAll({ name: NAME, storeId })).filter(c => !c.partitionKey);
+    await writeCopies(topLevelSite, storeId, [original]);
+    steps.push({ step: '준비', original: await findOriginal(), copies: await findCopies() });
+
+    for (const c of await listCopiesNamed(topLevelSite, storeId, NAME)) await expireCopy(c, storeId);
+    steps.push({ step: '만료 덮어쓰기로 사본 삭제', original: await findOriginal(), copies: await findCopies() });
+  } finally {
+    // 가짜 원본 정리도 remove 대신 만료 덮어쓰기로 한다.
+    await chrome.cookies.set({ ...base, value: '', expirationDate: 1 }).catch(() => null);
+    steps.push({ step: '정리', original: await findOriginal(), copies: await findCopies() });
+  }
+  const deleted = steps.find(s => s.step === '만료 덮어쓰기로 사본 삭제');
+  return { ok: true, safe: deleted?.original === 1 && deleted?.copies === 0, steps };
+}
+
+async function listCopiesNamed(topLevelSite, storeId, name) {
+  const found = [];
+  for (const bit of ANCESTOR_BITS) {
+    try {
+      found.push(...(await chrome.cookies.getAll({ name, storeId, partitionKey: partitionKeyFor(topLevelSite, bit) })));
+    } catch {
+      /* 모르는 분할 키 형식은 건너뛴다 */
+    }
+  }
+  const seen = new Set();
+  return found
+    .filter(c => c.partitionKey && !seen.has(JSON.stringify(c.partitionKey)) && seen.add(JSON.stringify(c.partitionKey)))
+    .map(describe);
 }
 
 async function knownTargets() {
@@ -158,7 +219,7 @@ async function diagnoseSoopCookies() {
 
 async function sync(topLevelSite, storeId, tab) {
   const originals = await readOriginals(storeId);
-  await removeCopies(topLevelSite, storeId);
+  // 같은 분할 키로 다시 쓰면 기존 사본이 덮어써지므로 먼저 지우지 않는다(지우는 단계를 줄여 원본을 건드릴 여지를 없앤다).
   const writes = originals.length ? await writeCopies(topLevelSite, storeId, originals) : [];
   await rememberTarget(topLevelSite, storeId);
   const diagnosis = await diagnoseSoopCookies();
@@ -193,6 +254,7 @@ async function handleMessage(message, sender) {
 
   if (message?.type === 'sync') return sync(topLevelSite, storeId, sender.tab);
   if (message?.type === 'clear') return { ok: true, removed: await removeCopies(topLevelSite, storeId) };
+  if (message?.type === 'selftest') return selfTest(topLevelSite, storeId);
   return { ok: false, error: 'unknown message' };
 }
 

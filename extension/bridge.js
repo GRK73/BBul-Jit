@@ -18,7 +18,7 @@
       return;
     }
 
-    if (data.type === 'sync' || data.type === 'clear') {
+    if (data.type === 'sync' || data.type === 'clear' || data.type === 'selftest') {
       let report;
       try {
         report = await chrome.runtime.sendMessage({ type: data.type });
