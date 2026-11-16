@@ -129,8 +129,11 @@
         meta,
         table('원본 쿠키', report.originals, ['name', 'domain', 'hostOnly', 'path', 'httpOnly', 'secure', 'sameSite', 'session']),
         table('사본 쓰기 시도', report.writes, ['name', 'domain', 'hasCrossSiteAncestor', 'ok', 'error']),
-        table('현재 분할 사본', report.copies, ['name', 'domain', 'path', 'httpOnly', 'secure', 'sameSite', 'session', 'partitionKey'])
+        table('현재 분할 사본', report.copies, ['name', 'domain', 'path', 'httpOnly', 'secure', 'sameSite', 'session', 'partitionKey']),
+        table('숲 도메인 쿠키 전체 (이름·속성만)', report.soopCookies || [], ['name', 'domain', 'hostOnly', 'path', 'httpOnly', 'secure', 'sameSite', 'session'])
       );
+      // 로그인 쿠키를 못 찾았으면 진단 표를 펼쳐서 바로 보이게 한다.
+      if (!report.loggedIn) box.closest('details').open = true;
     };
 
     // ---- 플레이어 ----

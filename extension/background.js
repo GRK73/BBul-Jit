@@ -114,6 +114,17 @@ async function rememberSite(topLevelSite) {
   }
 }
 
+// 시험판 진단용: 로그인 쿠키를 못 찾았을 때 숲 도메인에 실제로 어떤 쿠키가 있는지 이름·속성만 보여 준다(값은 빼고).
+// 숲이 도메인을 옮기면서 쿠키 이름이나 위치가 바뀌었을 수 있어서다. 정식판에서는 지운다.
+async function listSoopCookies() {
+  const lists = await Promise.all(['sooplive.com', 'sooplive.co.kr'].map(domain => chrome.cookies.getAll({ domain })));
+  return lists
+    .flat()
+    .filter(c => !c.partitionKey)
+    .map(describe)
+    .sort((a, b) => a.domain.localeCompare(b.domain) || a.name.localeCompare(b.name));
+}
+
 async function sync(topLevelSite) {
   const originals = await readOriginals();
   await removeCopies(topLevelSite);
@@ -126,7 +137,8 @@ async function sync(topLevelSite) {
     loggedIn: TICKETS.every(name => originals.some(c => c.name === name)),
     originals: originals.map(describe),
     writes,
-    copies: await listCopies(topLevelSite)
+    copies: await listCopies(topLevelSite),
+    soopCookies: await listSoopCookies()
   };
 }
 
