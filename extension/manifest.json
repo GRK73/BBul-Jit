@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PLAN.B 멀티뷰 로그인 도우미 (시험판)",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "PLAN.B 멀티뷰 페이지 안의 숲 플레이어에서만 로그인 상태를 쓰도록 로그인 쿠키를 분할 쿠키로 복사합니다.",
   "minimum_chrome_version": "119",
   "permissions": ["cookies", "storage"],

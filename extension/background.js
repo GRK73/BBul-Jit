@@ -2,6 +2,9 @@
 // 분할 쿠키는 "그 사이트가 최상위로 열렸을 때 안에 뜬 숲 iframe"에만 붙으므로 다른 사이트에는 노출되지 않는다.
 // 시험판: 어떤 조합이 실제로 먹히는지 보려고 결과를 자세히 돌려준다. 쿠키 값은 절대 밖으로 내보내지 않는다.
 //
+// 쿠키는 "요청한 탭의 쿠키 저장소"에서 읽고 쓴다. 시크릿 창은 일반 창과 저장소가 따로라서,
+// 저장소를 지정하지 않으면 시크릿 창에서 로그인한 쿠키를 못 찾는다.
+//
 // 서비스 워커는 30초쯤 쉬면 꺼지므로 상태는 전역 변수가 아니라 chrome.storage.session에 둔다.
 // 리스너는 모두 최상위에서 동기적으로 등록한다(꺼졌다 켜질 때 이벤트를 다시 받으려면 필요하다).
 
@@ -11,7 +14,8 @@ const TICKETS = ['AuthTicket', 'UserTicket', 'BbsTicket'];
 // iframe 바로 아래 문맥에서 어느 값이 맞는지 아직 모르므로 둘 다 써 보고 결과를 기록한다.
 // undefined는 hasCrossSiteAncestor를 모르는 구버전 크롬용이다.
 const ANCESTOR_BITS = [true, false, undefined];
-const SITES_KEY = 'topLevelSites';
+const TARGETS_KEY = 'syncTargets'; // [{ site, storeId }]
+const SOOP_DOMAINS = ['sooplive.com', 'sooplive.co.kr'];
 const SOOP_DOMAIN = /(^|\.)sooplive\.(com|co\.kr)$/;
 
 const isSoopCookie = c => SOOP_DOMAIN.test(c.domain.replace(/^\./, ''));
@@ -30,16 +34,22 @@ const describe = c => ({
   secure: c.secure,
   sameSite: c.sameSite,
   session: c.session,
+  storeId: c.storeId,
   partitionKey: c.partitionKey || null
 });
 
-async function readOriginals() {
-  const found = await Promise.all(TICKETS.map(name => chrome.cookies.getAll({ name })));
+async function storeIdForTab(tabId) {
+  const stores = await chrome.cookies.getAllCookieStores();
+  return stores.find(s => s.tabIds.includes(tabId))?.id;
+}
+
+async function readOriginals(storeId) {
+  const found = await Promise.all(TICKETS.map(name => chrome.cookies.getAll({ name, storeId })));
   // partitionKey 없이 getAll하면 원본(비분할) 쿠키만 온다. 숲 도메인 것만 남긴다.
   return found.flat().filter(c => !c.partitionKey && isSoopCookie(c));
 }
 
-async function writeCopies(topLevelSite, originals) {
+async function writeCopies(topLevelSite, storeId, originals) {
   const writes = [];
   for (const c of originals) {
     for (const bit of ANCESTOR_BITS) {
@@ -51,6 +61,7 @@ async function writeCopies(topLevelSite, originals) {
         secure: true,
         httpOnly: c.httpOnly,
         sameSite: 'no_restriction',
+        storeId,
         partitionKey: partitionKeyFor(topLevelSite, bit)
       };
       if (!c.hostOnly) details.domain = c.domain;
@@ -69,13 +80,13 @@ async function writeCopies(topLevelSite, originals) {
   return writes;
 }
 
-async function listCopies(topLevelSite) {
+async function listCopies(topLevelSite, storeId) {
   const seen = new Set();
   const copies = [];
   for (const bit of ANCESTOR_BITS) {
     let found = [];
     try {
-      found = await chrome.cookies.getAll({ partitionKey: partitionKeyFor(topLevelSite, bit) });
+      found = await chrome.cookies.getAll({ storeId, partitionKey: partitionKeyFor(topLevelSite, bit) });
     } catch {
       continue; // 이 크롬이 해당 분할 키 형식을 모르면 건너뛴다
     }
@@ -90,11 +101,11 @@ async function listCopies(topLevelSite) {
   return copies;
 }
 
-async function removeCopies(topLevelSite, name) {
-  const copies = (await listCopies(topLevelSite)).filter(c => !name || c.name === name);
+async function removeCopies(topLevelSite, storeId, name) {
+  const copies = (await listCopies(topLevelSite, storeId)).filter(c => !name || c.name === name);
   for (const c of copies) {
     try {
-      await chrome.cookies.remove({ url: cookieUrl(c), name: c.name, partitionKey: c.partitionKey });
+      await chrome.cookies.remove({ url: cookieUrl(c), name: c.name, storeId, partitionKey: c.partitionKey });
     } catch (error) {
       console.warn('사본 삭제 실패', c.name, errorText(error));
     }
@@ -102,59 +113,85 @@ async function removeCopies(topLevelSite, name) {
   return copies.length;
 }
 
-async function knownSites() {
-  const { [SITES_KEY]: sites = [] } = await chrome.storage.session.get(SITES_KEY);
-  return sites;
+async function knownTargets() {
+  const { [TARGETS_KEY]: targets = [] } = await chrome.storage.session.get(TARGETS_KEY);
+  return targets;
 }
 
-async function rememberSite(topLevelSite) {
-  const sites = await knownSites();
-  if (!sites.includes(topLevelSite)) {
-    await chrome.storage.session.set({ [SITES_KEY]: [...sites, topLevelSite] });
+async function rememberTarget(site, storeId) {
+  const targets = await knownTargets();
+  if (!targets.some(t => t.site === site && t.storeId === storeId)) {
+    await chrome.storage.session.set({ [TARGETS_KEY]: [...targets, { site, storeId }] });
   }
 }
 
-// 시험판 진단용: 로그인 쿠키를 못 찾았을 때 숲 도메인에 실제로 어떤 쿠키가 있는지 이름·속성만 보여 준다(값은 빼고).
-// 숲이 도메인을 옮기면서 쿠키 이름이나 위치가 바뀌었을 수 있어서다. 정식판에서는 지운다.
-async function listSoopCookies() {
-  const lists = await Promise.all(['sooplive.com', 'sooplive.co.kr'].map(domain => chrome.cookies.getAll({ domain })));
-  return lists
-    .flat()
-    .filter(c => !c.partitionKey)
-    .map(describe)
-    .sort((a, b) => a.domain.localeCompare(b.domain) || a.name.localeCompare(b.name));
+// 시험판 진단용: 로그인 쿠키를 못 찾았을 때 모든 쿠키 저장소·모든 분할에서 숲 쿠키의 이름·속성만 모아 보여 준다(값은 빼고).
+// 정식판에서는 지운다.
+async function diagnoseSoopCookies() {
+  const stores = await chrome.cookies.getAllCookieStores();
+  const rows = [];
+  for (const store of stores) {
+    for (const domain of SOOP_DOMAINS) {
+      for (const query of [{ domain, storeId: store.id }, { domain, storeId: store.id, partitionKey: {} }]) {
+        try {
+          rows.push(...(await chrome.cookies.getAll(query)));
+        } catch {
+          /* partitionKey: {}를 모르는 크롬이면 건너뛴다 */
+        }
+      }
+    }
+  }
+  const seen = new Set();
+  return {
+    stores: stores.map(s => ({ id: s.id, tabs: s.tabIds.length })),
+    cookies: rows
+      .filter(c => {
+        const key = `${c.storeId}|${c.name}|${c.domain}|${JSON.stringify(c.partitionKey)}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map(describe)
+      .sort((a, b) => a.storeId.localeCompare(b.storeId) || a.domain.localeCompare(b.domain) || a.name.localeCompare(b.name))
+  };
 }
 
-async function sync(topLevelSite) {
-  const originals = await readOriginals();
-  await removeCopies(topLevelSite);
-  const writes = originals.length ? await writeCopies(topLevelSite, originals) : [];
-  await rememberSite(topLevelSite);
+async function sync(topLevelSite, storeId, tab) {
+  const originals = await readOriginals(storeId);
+  await removeCopies(topLevelSite, storeId);
+  const writes = originals.length ? await writeCopies(topLevelSite, storeId, originals) : [];
+  await rememberTarget(topLevelSite, storeId);
+  const diagnosis = await diagnoseSoopCookies();
   return {
     ok: true,
     topLevelSite,
+    storeId,
+    incognito: Boolean(tab?.incognito),
     browser: navigator.userAgent,
     loggedIn: TICKETS.every(name => originals.some(c => c.name === name)),
     originals: originals.map(describe),
     writes,
-    copies: await listCopies(topLevelSite),
-    soopCookies: await listSoopCookies()
+    copies: await listCopies(topLevelSite, storeId),
+    stores: diagnosis.stores,
+    soopCookies: diagnosis.cookies
   };
 }
 
 async function handleMessage(message, sender) {
   // 콘텐츠 스크립트(bridge.js)가 허용된 최상위 페이지에서 보낸 요청만 받는다.
   const origin = sender.origin || (sender.url ? new URL(sender.url).origin : '');
-  if (!origin || !isAllowedOrigin(origin) || sender.frameId !== 0) {
+  if (!origin || !isAllowedOrigin(origin) || sender.frameId !== 0 || !sender.tab) {
     return { ok: false, error: `허용되지 않은 출처: ${origin}` };
   }
 
   // 분할 키는 "사이트"(스킴+호스트) 단위라 포트를 뺀다. vercel.app은 공개 접미사라 호스트 전체가 한 사이트다.
   const { protocol, hostname } = new URL(origin);
   const topLevelSite = `${protocol}//${hostname}`;
+  const storeId = await storeIdForTab(sender.tab.id);
+  if (!storeId) return { ok: false, error: '이 탭의 쿠키 저장소를 찾지 못했어요' };
 
-  if (message?.type === 'sync') return sync(topLevelSite);
-  if (message?.type === 'clear') return { ok: true, removed: await removeCopies(topLevelSite) };
+  if (message?.type === 'sync') return sync(topLevelSite, storeId, sender.tab);
+  if (message?.type === 'clear') return { ok: true, removed: await removeCopies(topLevelSite, storeId) };
   return { ok: false, error: 'unknown message' };
 }
 
@@ -169,7 +206,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true; // 비동기 응답을 기다리도록 채널을 열어 둔다
 });
 
-// 숲에서 다시 로그인하거나 로그아웃하면 사본도 따라간다.
+// 숲에서 다시 로그인하거나 로그아웃하면 같은 저장소의 사본도 따라간다.
 // 타이머로 모으지 않고 쿠키 하나씩 처리한다(서비스 워커가 꺼지면 타이머도 사라진다).
 chrome.cookies.onChanged.addListener(({ cookie, removed, cause }) => {
   if (!TICKETS.includes(cookie.name) || cookie.partitionKey || !isSoopCookie(cookie)) return;
@@ -178,9 +215,10 @@ chrome.cookies.onChanged.addListener(({ cookie, removed, cause }) => {
 
   (async () => {
     try {
-      for (const site of await knownSites()) {
-        if (removed) await removeCopies(site, cookie.name);
-        else await writeCopies(site, [cookie]);
+      for (const { site, storeId } of await knownTargets()) {
+        if (storeId !== cookie.storeId) continue;
+        if (removed) await removeCopies(site, storeId, cookie.name);
+        else await writeCopies(site, storeId, [cookie]);
       }
     } catch (error) {
       console.error('사본 동기화 실패', errorText(error));
