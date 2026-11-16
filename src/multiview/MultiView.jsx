@@ -242,7 +242,7 @@ function Tile({ id, index, count, stream, layout, chatMode, isChatTarget, reload
           />
         </div>
         {chatMode === 'each' && (
-          <div className="relative w-[clamp(180px,28%,340px)] shrink-0 border-l border-white/10 bg-[#0b0b0b]">
+          <div className="relative w-[clamp(240px,34%,380px)] shrink-0 border-l border-white/10 bg-[#0b0b0b]">
             {chatSrc ? (
               <iframe key={`chat-${reloadToken}`} title={`${name} 채팅`} src={chatSrc} allow={IFRAME_ALLOW} className="absolute inset-0 h-full w-full border-0" />
             ) : (
@@ -675,7 +675,7 @@ export default function MultiView() {
         </main>
 
         {chatMode === 'single' && count > 0 && (
-          <aside className="flex w-[340px] shrink-0 flex-col border-l border-white/10" aria-label="채팅">
+          <aside className="flex w-[380px] shrink-0 flex-col border-l border-white/10" aria-label="채팅">
             <div role="group" aria-label="채팅 볼 방송" className="flex shrink-0 gap-1 overflow-x-auto border-b border-white/10 p-1.5">
               {slots.map(id => (
                 <button
