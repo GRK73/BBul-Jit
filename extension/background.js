@@ -173,7 +173,8 @@ async function sync(topLevelSite, storeId, tab) {
     writes,
     copies: await listCopies(topLevelSite, storeId),
     stores: diagnosis.stores,
-    soopCookies: diagnosis.cookies
+    soopCookies: diagnosis.cookies,
+    events: (await chrome.storage.session.get(EVENTS_KEY))[EVENTS_KEY] || []
   };
 }
 
@@ -204,6 +205,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
   })();
   return true; // 비동기 응답을 기다리도록 채널을 열어 둔다
+});
+
+// 시험판 진단용: 로그인 쿠키가 언제, 왜 바뀌었는지 최근 40건을 기록한다(값은 기록하지 않는다).
+// 원본이 사라진 시점과 원인(cause)을 보면 확장이 지운 건지, 숲 서버가 지운 건지 가릴 수 있다.
+const EVENTS_KEY = 'ticketEvents';
+async function logTicketEvent(entry) {
+  const { [EVENTS_KEY]: events = [] } = await chrome.storage.session.get(EVENTS_KEY);
+  await chrome.storage.session.set({ [EVENTS_KEY]: [...events, entry].slice(-40) });
+}
+
+chrome.cookies.onChanged.addListener(({ cookie, removed, cause }) => {
+  if (!TICKETS.includes(cookie.name) || !isSoopCookie(cookie)) return;
+  logTicketEvent({
+    time: new Date().toISOString().slice(11, 23),
+    name: cookie.name,
+    change: removed ? 'removed' : 'set',
+    cause,
+    copy: cookie.partitionKey ? '사본' : '원본',
+    sameSite: cookie.sameSite,
+    secure: cookie.secure
+  }).catch(error => console.warn('기록 실패', errorText(error)));
 });
 
 // 숲에서 다시 로그인하거나 로그아웃하면 같은 저장소의 사본도 따라간다.
