@@ -111,6 +111,7 @@ https://planb-livecheck.vercel.app/
 
 | Version | Date | Changes | Status |
 |---------|------|---------|--------|
+| 0.0.3 | 2026-11-16 | 시험 주소를 푸시해도 바뀌지 않는 브랜치 미리보기 주소로 변경 | Draft |
 | 0.0.2 | 2026-11-16 | Chrome 확장 가이드(modern-web-guidance의 chrome-extensions 스킬)에 맞춰 정리: 콘텐츠 스크립트를 정확한 주소로 제한, 서비스 워커 타이머·전역 상태 제거, async/await로 통일 | Draft |
 | 0.0.1 | 2026-11-16 | 0단계 시험판: 로그인 쿠키를 멀티뷰 전용 분할 쿠키로 복사 | Draft |
 

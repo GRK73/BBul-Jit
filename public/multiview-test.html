@@ -24,6 +24,7 @@
     table { border-collapse: collapse; width: 100%; font-size: 12px; margin-top: 8px; }
     th, td { border: 1px solid #222; padding: 4px 6px; text-align: left; white-space: nowrap; }
     .scroll { overflow-x: auto; }
+    .help { margin: 0; padding: 8px 12px; border-radius: 8px; background: #3a2a00; color: #ffd27a; }
     pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: #aaa; }
     main { display: grid; gap: 8px; padding: 8px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); }
     .cell { position: relative; aspect-ratio: 16 / 9; background: #0a0a0a; border: 1px solid #222; border-radius: 8px; overflow: hidden; }
@@ -38,7 +39,12 @@
       확장: <span id="ext" class="badge wait">확인 중…</span>
       숲 원본 로그인: <span id="login" class="badge wait">-</span>
       분할 사본: <span id="copies" class="badge wait">-</span>
+      고화질 스트리머 권한: <span id="lna" class="badge wait">-</span>
     </div>
+    <p id="lna-help" class="help" hidden>
+      이 사이트에서 로컬 네트워크 권한이 차단돼 있어요. 주소창 왼쪽의 사이트 정보 아이콘 → <b>사이트 설정</b>에서
+      <b>루프백 네트워크</b>(또는 <b>로컬 네트워크 액세스</b>)를 <b>허용</b>으로 바꾼 뒤 페이지를 새로고침하세요.
+    </p>
     <div class="row">
       <input id="ids" placeholder="숲 아이디를 쉼표로 (예: bver99, ch1ch1r0)" />
       <button id="apply">플레이어 다시 띄우기</button>
@@ -142,7 +148,10 @@
         cell.className = 'cell';
         const frame = document.createElement('iframe');
         frame.src = `https://play.sooplive.com/${encodeURIComponent(id)}/embed`;
-        frame.allow = 'autoplay; fullscreen; encrypted-media; picture-in-picture';
+        // 숲 플레이어는 PC에 설치된 SOOP Streamer(고화질 스트리머)에 127.0.0.1 웹소켓으로 붙는다.
+        // 크롬의 로컬 네트워크 접근(LNA) 권한은 기본적으로 다른 출처 iframe에 넘어가지 않으므로 여기서 위임한다.
+        // loopback-network = 내 PC(127.0.0.1), local-network = 같은 공유기 안의 기기. 크롬 145부터 이 이름을 쓴다.
+        frame.allow = 'autoplay; fullscreen; encrypted-media; picture-in-picture; loopback-network; local-network';
         frame.allowFullscreen = true;
         const label = document.createElement('span');
         label.textContent = id;
@@ -163,6 +172,24 @@
       setBadge($('copies'), 'wait', r?.ok ? `삭제함 ${r.removed}개` : '삭제 실패');
       renderPlayers();
     };
+
+    // ---- 고화질 스트리머(로컬 네트워크) 권한 상태 ----
+    // 'local-network-access'로 조회하면 옛 크롬이 죽을 수 있어 새 이름만 조회하고, 모르는 이름이면 '확인 불가'로 둔다.
+    const showLnaState = state => {
+      const label = { granted: '허용됨', prompt: '물어봄', denied: '차단됨' }[state] || '확인 불가';
+      setBadge($('lna'), state === 'granted' ? 'ok' : state === 'denied' ? 'bad' : 'wait', label);
+      $('lna-help').hidden = state !== 'denied';
+    };
+    (async () => {
+      if (!navigator.permissions?.query) return showLnaState('unknown');
+      try {
+        const status = await navigator.permissions.query({ name: 'loopback-network' });
+        showLnaState(status.state);
+        status.addEventListener('change', () => showLnaState(status.state));
+      } catch {
+        showLnaState('unknown');
+      }
+    })();
 
     // ---- 시작: 아이디 채우기 → 확장 기다리기 → 쿠키 복사 → 플레이어 ----
     (async () => {
