@@ -25,8 +25,18 @@ const CHAT_MODES = [
 ];
 
 const playerUrl = id => `https://play.sooplive.com/${encodeURIComponent(id)}/embed`;
-const chatUrl = (id, broadNo) =>
-  broadNo ? `https://play.sooplive.com/${encodeURIComponent(id)}/${encodeURIComponent(broadNo)}?vtype=chat` : null;
+const pageUrl = id => `https://play.sooplive.com/${encodeURIComponent(id)}`;
+// 채팅 대상 쪽 방송 페이지는 영상이 한 번 더 재생되므로, 자동재생 권한을 주지 않아 소리가 겹치지 않게 한다.
+const IFRAME_ALLOW_NO_AUTOPLAY = 'encrypted-media; loopback-network; local-network';
+
+// 숲 채팅 전용 주소(?vtype=chat)는 플레이어 창이 띄운 팝업에서만 메시지를 받는다(window.opener.liveView를 읽는다).
+// 그래서 iframe으로는 비어 있다. 대신 방송 페이지를 데스크톱 크기로 띄우고 필요한 부분만 잘라서 보여 준다.
+// 아래 좌표는 1920×1080에서 잰 값이다(크롬 157, 2026-11-16). 숲 화면 배치가 바뀌면 다시 재야 한다.
+const SOOP_PAGE = { width: 1920, height: 1080 };
+const CROP = {
+  playerAndChat: { x: 16, y: 66, w: 1882, h: 830 }, // 플레이어 + 오른쪽 채팅
+  chat: { x: 1494, y: 66, w: 402, h: 830 } // 채팅 칸만
+};
 const nameOf = (id, stream) => MEMBERS[id]?.name || stream?.nick || id;
 const canEmbed = id => SOOP_ID.test(id) && !isChzzkId(id);
 
@@ -171,6 +181,51 @@ function LoginChip({ state, onRetry }) {
   );
 }
 
+// 방송 페이지를 1920×1080으로 띄운 뒤 region 부분만 칸 크기에 맞춰 보여 준다(비율 유지, 남는 곳은 검게).
+function SoopPageCrop({ id, region, title, allow }) {
+  const boxRef = useRef(null);
+  const [fit, setFit] = useState(null);
+
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    const measure = () => {
+      const { clientWidth: w, clientHeight: h } = box;
+      if (!w || !h) return;
+      const scale = Math.min(w / region.w, h / region.h);
+      setFit({
+        scale,
+        left: (w - region.w * scale) / 2 - region.x * scale,
+        top: (h - region.h * scale) / 2 - region.y * scale
+      });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [region]);
+
+  return (
+    <div ref={boxRef} className="absolute inset-0 overflow-hidden bg-black">
+      {fit && (
+        <iframe
+          title={title}
+          src={pageUrl(id)}
+          allow={allow}
+          className="absolute border-0"
+          style={{
+            width: SOOP_PAGE.width,
+            height: SOOP_PAGE.height,
+            left: fit.left,
+            top: fit.top,
+            transformOrigin: '0 0',
+            scale: String(fit.scale)
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 const IconButton = ({ label, onClick, children, disabled = false, pressed }) => (
   <button
     type="button"
@@ -189,7 +244,6 @@ const IconButton = ({ label, onClick, children, disabled = false, pressed }) => 
 
 function Tile({ id, index, count, stream, layout, chatMode, isChatTarget, reloadToken, actions }) {
   const name = nameOf(id, stream);
-  const chatSrc = chatUrl(id, stream?.broadNo);
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-[10px] border border-white/10 bg-[#050505]">
       <div className="flex h-8 shrink-0 items-center gap-1.5 border-b border-white/10 bg-black px-1.5 text-[12px]">
@@ -231,8 +285,11 @@ function Tile({ id, index, count, stream, layout, chatMode, isChatTarget, reload
           </IconButton>
         </span>
       </div>
-      <div className="flex min-h-0 flex-1">
-        <div className="relative min-w-0 flex-1 bg-black">
+      <div className="relative min-h-0 flex-1 bg-black">
+        {chatMode === 'each' ? (
+          // 영상마다 채팅: 숲 방송 페이지에서 플레이어 + 채팅 부분을 잘라 보여 준다(채팅 입력도 된다)
+          <SoopPageCrop key={`page-${reloadToken}`} id={id} region={CROP.playerAndChat} title={`${name} 방송과 채팅`} allow={IFRAME_ALLOW} />
+        ) : (
           <iframe
             key={`player-${reloadToken}`}
             title={`${name} 방송`}
@@ -240,15 +297,6 @@ function Tile({ id, index, count, stream, layout, chatMode, isChatTarget, reload
             allow={IFRAME_ALLOW}
             className="absolute inset-0 h-full w-full border-0"
           />
-        </div>
-        {chatMode === 'each' && (
-          <div className="relative w-[clamp(240px,34%,380px)] shrink-0 border-l border-white/10 bg-[#0b0b0b]">
-            {chatSrc ? (
-              <iframe key={`chat-${reloadToken}`} title={`${name} 채팅`} src={chatSrc} allow={IFRAME_ALLOW} className="absolute inset-0 h-full w-full border-0" />
-            ) : (
-              <p className="p-3 text-[12px] text-white/50">방송 중이 아니라 채팅을 열 수 없어요.</p>
-            )}
-          </div>
         )}
       </div>
     </div>
@@ -675,7 +723,7 @@ export default function MultiView() {
         </main>
 
         {chatMode === 'single' && count > 0 && (
-          <aside className="flex w-[380px] shrink-0 flex-col border-l border-white/10" aria-label="채팅">
+          <aside className="flex w-[400px] shrink-0 flex-col border-l border-white/10" aria-label="채팅">
             <div role="group" aria-label="채팅 볼 방송" className="flex shrink-0 gap-1 overflow-x-auto border-b border-white/10 p-1.5">
               {slots.map(id => (
                 <button
@@ -692,27 +740,17 @@ export default function MultiView() {
               ))}
             </div>
             <div className="relative min-h-0 flex-1 bg-[#0b0b0b]">
-              {/* 채팅창은 모두 열어 두고 고른 것만 보여 준다(바꿀 때마다 다시 들어가지 않게) */}
-              {stableOrder.map(id => {
-                const src = chatUrl(id, streamsById[id]?.broadNo);
-                const name = nameOf(id, streamsById[id]);
-                return src ? (
-                  <iframe
-                    key={`${id}-${reloadToken}`}
-                    title={`${name} 채팅`}
-                    src={src}
-                    allow={IFRAME_ALLOW}
-                    hidden={activeChat !== id}
-                    className="absolute inset-0 h-full w-full border-0"
-                  />
-                ) : (
-                  activeChat === id && (
-                    <p key={id} className="p-3 text-[12px] text-white/50">
-                      {name} 방송 정보를 아직 못 받아서 채팅을 열 수 없어요.
-                    </p>
-                  )
-                );
-              })}
+              {/* 고른 방송의 숲 방송 페이지에서 채팅 칸만 잘라 보여 준다.
+                  그 페이지도 영상을 재생하므로 하나만 띄우고, 자동재생 권한을 빼서 소리가 겹치지 않게 한다. */}
+              {activeChat && (
+                <SoopPageCrop
+                  key={`${activeChat}-${reloadToken}`}
+                  id={activeChat}
+                  region={CROP.chat}
+                  title={`${nameOf(activeChat, streamsById[activeChat])} 채팅`}
+                  allow={IFRAME_ALLOW_NO_AUTOPLAY}
+                />
+              )}
             </div>
           </aside>
         )}
