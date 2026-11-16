@@ -194,8 +194,11 @@ function SoopPageCrop({ id, region, title, allow }) {
       const scale = Math.min(w / region.w, h / region.h);
       setFit({
         scale,
-        left: (w - region.w * scale) / 2 - region.x * scale,
-        top: (h - region.h * scale) / 2 - region.y * scale
+        // 잘라 낼 창(region 크기)을 칸 가운데에 두고, 그 바깥은 감춘다
+        frameLeft: (w - region.w * scale) / 2,
+        frameTop: (h - region.h * scale) / 2,
+        frameWidth: region.w * scale,
+        frameHeight: region.h * scale
       });
     };
     measure();
@@ -207,20 +210,25 @@ function SoopPageCrop({ id, region, title, allow }) {
   return (
     <div ref={boxRef} className="absolute inset-0 overflow-hidden bg-black">
       {fit && (
-        <iframe
-          title={title}
-          src={pageUrl(id)}
-          allow={allow}
-          className="absolute border-0"
-          style={{
-            width: SOOP_PAGE.width,
-            height: SOOP_PAGE.height,
-            left: fit.left,
-            top: fit.top,
-            transformOrigin: '0 0',
-            scale: String(fit.scale)
-          }}
-        />
+        <div
+          className="absolute overflow-hidden"
+          style={{ left: fit.frameLeft, top: fit.frameTop, width: fit.frameWidth, height: fit.frameHeight }}
+        >
+          <iframe
+            title={title}
+            src={pageUrl(id)}
+            allow={allow}
+            className="absolute border-0"
+            style={{
+              width: SOOP_PAGE.width,
+              height: SOOP_PAGE.height,
+              left: -region.x * fit.scale,
+              top: -region.y * fit.scale,
+              transformOrigin: '0 0',
+              scale: String(fit.scale)
+            }}
+          />
+        </div>
       )}
     </div>
   );
