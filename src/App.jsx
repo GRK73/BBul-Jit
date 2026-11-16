@@ -549,6 +549,7 @@ const App = () => {
             >
               <GlitteringLogo sizeClass="w-[200px] md:w-[300px]" />
             </button>
+            <div className="flex flex-col items-center gap-3 md:gap-4">
             <button
               type="button"
               onClick={toggleDisplayMode}
@@ -568,6 +569,20 @@ const App = () => {
                 All
               </span>
             </button>
+            {/* 멀티뷰는 별도 페이지(multiview.html). 지금 방송 중인 멤버를 최대 4명까지 한 화면에 띄운다. */}
+            <a
+              href="multiview.html"
+              className="flex h-[52px] w-44 items-center justify-center gap-2.5 whitespace-nowrap rounded-full border border-white/20 bg-white/5 px-4 text-xs font-black uppercase tracking-[0.25em] backdrop-blur-md transition-colors duration-300 hover:bg-white hover:text-black md:h-[58px] md:w-60 md:gap-3 md:text-sm md:tracking-[0.4em]"
+            >
+              <span className="grid grid-cols-2 gap-[2px]" aria-hidden="true">
+                <span className="h-1.5 w-1.5 rounded-[1px] bg-current"></span>
+                <span className="h-1.5 w-1.5 rounded-[1px] bg-current"></span>
+                <span className="h-1.5 w-1.5 rounded-[1px] bg-current"></span>
+                <span className="h-1.5 w-1.5 rounded-[1px] bg-current"></span>
+              </span>
+              <span>Multi View</span>
+            </a>
+            </div>
           </div>
           
           {/* 모바일에서 grid-cols-2 적용 */}

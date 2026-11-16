@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="theme-color" content="#000000" />
+    <style>
+      @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+
+      @font-face {
+        font-family: 'planb';
+        src: url('/planb.otf') format('opentype');
+      }
+
+      html, body { height: 100%; }
+
+      body {
+        margin: 0;
+        background-color: black;
+        color: white;
+        font-family: 'Pretendard', sans-serif;
+      }
+
+      .font-planb {
+        font-family: 'planb', sans-serif !important;
+      }
+    </style>
+    <title>BIP - MULTI VIEW</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/multiview/main.jsx"></script>
+  </body>
+</html>

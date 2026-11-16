@@ -1,0 +1,70 @@
+/* 멀티뷰 화면 배치.
+   타일은 DOM 순서 = 화면 순서다(위치를 바꾸면 moveBefore로 실제 순서를 옮긴다).
+   n번째 타일이 a, b, c, d 칸에 들어가고, 배치 방식(data-layout)과 개수(data-count)에 따라 칸 모양만 바뀐다. */
+
+.mv-stage-grid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  gap: 6px;
+}
+
+/* 영상 타일 층: 빈 곳은 클릭이 아래(놓기 안내 층)로 통과한다 */
+.mv-tiles { pointer-events: none; }
+.mv-tile { pointer-events: auto; min-width: 0; min-height: 0; }
+.mv-tile:nth-child(1) { grid-area: a; }
+.mv-tile:nth-child(2) { grid-area: b; }
+.mv-tile:nth-child(3) { grid-area: c; }
+.mv-tile:nth-child(4) { grid-area: d; }
+
+/* 1개는 어떤 배치든 화면 전체 */
+.mv-stage-grid[data-count="1"] { grid-template: "a" 1fr / 1fr; }
+
+/* 분할: 2개는 좌우, 3개는 오른쪽 아래가 빈 2×2, 4개는 2×2 */
+.mv-stage-grid[data-layout="grid"][data-count="2"] { grid-template: "a b" 1fr / 1fr 1fr; }
+.mv-stage-grid[data-layout="grid"][data-count="3"],
+.mv-stage-grid[data-layout="grid"][data-count="4"] { grid-template: "a b" 1fr "c d" 1fr / 1fr 1fr; }
+
+/* 큰 화면 + 아래 작은 화면 3칸 */
+.mv-stage-grid[data-layout="focus"]:not([data-count="1"]) {
+  grid-template: "a a a" 3fr "b c d" 1fr / 1fr 1fr 1fr;
+}
+
+/* 큰 화면 + 오른쪽 작은 화면 3칸 */
+.mv-stage-grid[data-layout="side"]:not([data-count="1"]) {
+  grid-template: "a b" 1fr "a c" 1fr "a d" 1fr / 3fr 1fr;
+}
+
+/* 가로 한 줄 */
+.mv-stage-grid[data-layout="row"][data-count="2"] { grid-template: "a b" 1fr / 1fr 1fr; }
+.mv-stage-grid[data-layout="row"][data-count="3"] { grid-template: "a b c" 1fr / 1fr 1fr 1fr; }
+.mv-stage-grid[data-layout="row"][data-count="4"] { grid-template: "a b c d" 1fr / 1fr 1fr 1fr 1fr; }
+
+/* 끌어다 놓는 동안만 iframe 위를 덮는다(iframe 위에서는 부모 페이지가 끌기 이벤트를 못 받는다) */
+.mv-drop-cell {
+  border: 2px dashed rgb(255 255 255 / 0.35);
+  border-radius: 10px;
+  background: rgb(0 0 0 / 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: rgb(255 255 255 / 0.85);
+  transition: background-color 150ms, border-color 150ms;
+}
+.mv-drop-cell[data-over="true"] {
+  border-color: white;
+  background: rgb(255 255 255 / 0.18);
+}
+
+/* 화면 읽기 프로그램에만 들리는 안내 */
+.mv-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { fileURLToPath } from 'node:url'
 
 // 로컬 개발에서도 /api/*.js(Vercel 함수)를 그대로 실행한다. 배포에는 영향 없음.
 const localApi = () => ({
@@ -27,5 +28,14 @@ const localApi = () => ({
 
 export default defineConfig({
   plugins: [react(), localApi()],
-  base: './'
+  base: './',
+  build: {
+    // 페이지가 두 개다: 메인(index.html)과 멀티뷰(multiview.html)
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        multiview: fileURLToPath(new URL('./multiview.html', import.meta.url))
+      }
+    }
+  }
 })
