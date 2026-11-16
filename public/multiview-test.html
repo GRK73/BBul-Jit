@@ -27,8 +27,15 @@
     .help { margin: 0; padding: 8px 12px; border-radius: 8px; background: #3a2a00; color: #ffd27a; }
     pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: #aaa; }
     main { display: grid; gap: 8px; padding: 8px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); }
+    main.page { grid-template-columns: repeat(auto-fit, minmax(min(100%, 720px), 1fr)); }
     .cell { position: relative; aspect-ratio: 16 / 9; background: #0a0a0a; border: 1px solid #222; border-radius: 8px; overflow: hidden; }
     .cell iframe { width: 100%; height: 100%; border: 0; }
+    /* 방송 페이지 보기: 데스크톱 크기(1920×1080)로 띄운 뒤 칸에 맞게 통째로 줄인다.
+       그대로 좁은 칸에 넣으면 숲이 모바일 화면으로 바꿔 버려서 원래 방송 페이지처럼 보이지 않는다. */
+    .cell.page iframe { position: absolute; inset: 0 auto auto 0; width: 1920px; height: 1080px; transform-origin: 0 0; scale: var(--fit, 0.25); }
+    .seg { display: inline-flex; border: 1px solid #444; border-radius: 8px; overflow: hidden; }
+    .seg button { border: 0; border-radius: 0; }
+    .seg button[aria-pressed="true"] { background: #fff; color: #000; }
     .cell span { position: absolute; left: 8px; top: 8px; font-size: 11px; background: #000a; padding: 2px 8px; border-radius: 999px; pointer-events: none; }
   </style>
 </head>
@@ -47,6 +54,10 @@
     </p>
     <div class="row">
       <input id="ids" placeholder="숲 아이디를 쉼표로 (예: bver99, ch1ch1r0)" />
+      <span class="seg" role="group" aria-label="보기 방식">
+        <button type="button" data-mode="page" aria-pressed="true">방송 페이지</button>
+        <button type="button" data-mode="embed" aria-pressed="false">플레이어만</button>
+      </span>
       <button id="apply">플레이어 다시 띄우기</button>
       <button id="resync">쿠키 다시 복사</button>
       <button id="clear">사본 삭제(비교용)</button>
@@ -144,17 +155,42 @@
     const currentIds = () =>
       $('ids').value.split(/[\s,]+/).map(s => s.trim()).filter(id => SOOP_ID.test(id)).slice(0, 6);
 
+    // 보기 방식: page = 숲 방송 페이지 전체(채팅·방송 정보 포함), embed = 플레이어만
+    const PAGE_WIDTH = 1920;
+    let viewMode = new URLSearchParams(location.search).get('mode') === 'embed' ? 'embed' : 'page';
+    const modeButtons = document.querySelectorAll('[data-mode]');
+    const showMode = () => modeButtons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === viewMode)));
+    modeButtons.forEach(b => b.addEventListener('click', () => {
+      viewMode = b.dataset.mode;
+      showMode();
+      renderPlayers();
+    }));
+    showMode();
+
+    // 칸 크기가 바뀔 때마다 데스크톱 크기 방송 페이지를 칸 폭에 맞게 줄인다.
+    const setFit = (cell, width) => cell.style.setProperty('--fit', String(width / PAGE_WIDTH));
+    const fitObserver = new ResizeObserver(entries => {
+      for (const entry of entries) setFit(entry.target, entry.contentRect.width);
+    });
+
     const renderPlayers = () => {
       const ids = currentIds();
       const url = new URL(location.href);
       url.searchParams.set('ids', ids.join(','));
+      url.searchParams.set('mode', viewMode);
       history.replaceState(null, '', url);
 
+      fitObserver.disconnect();
+      $('grid').classList.toggle('page', viewMode === 'page');
       $('grid').replaceChildren(...ids.map(id => {
         const cell = document.createElement('div');
-        cell.className = 'cell';
+        cell.className = `cell ${viewMode}`;
         const frame = document.createElement('iframe');
-        frame.src = `https://play.sooplive.com/${encodeURIComponent(id)}/embed`;
+        frame.title = `${id} 방송`;
+        frame.src = viewMode === 'page'
+          ? `https://play.sooplive.com/${encodeURIComponent(id)}`
+          : `https://play.sooplive.com/${encodeURIComponent(id)}/embed`;
+        if (viewMode === 'page') fitObserver.observe(cell);
         // 숲 플레이어는 PC에 설치된 SOOP Streamer(고화질 스트리머)에 127.0.0.1 웹소켓으로 붙는다.
         // 크롬의 로컬 네트워크 접근(LNA) 권한은 기본적으로 다른 출처 iframe에 넘어가지 않으므로 여기서 위임한다.
         // loopback-network = 내 PC(127.0.0.1), local-network = 같은 공유기 안의 기기. 크롬 145부터 이 이름을 쓴다.
@@ -165,6 +201,10 @@
         cell.append(frame, label);
         return cell;
       }));
+      // 관찰자는 화면이 그려질 때 알려 주므로, 첫 크기는 배치 직후 바로 맞춰 둔다.
+      if (viewMode === 'page') {
+        document.querySelectorAll('.cell.page').forEach(cell => setFit(cell, cell.clientWidth));
+      }
     };
 
     const syncThenRender = async () => {
